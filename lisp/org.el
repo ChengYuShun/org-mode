@@ -9,6 +9,8 @@
 ;; URL: https://orgmode.org
 ;; Package-Requires: ((emacs "26.1"))
 
+;; Modified by Yushun Cheng on 2024-08-02.
+
 ;; Version: 9.8-pre
 
 ;; This file is part of GNU Emacs.
@@ -16103,7 +16105,7 @@ at point."
     (org-in-regexp
      "\\\\[a-zA-Z]+\\*?\\(\\(\\[[^][\n{}]*\\]\\)\\|\\({[^{}\n]*}\\)\\)*")))
 
-(defun org--make-preview-overlay (beg end image &optional imagetype)
+(defun org--make-preview-overlay (beg end image &optional imagetype scale)
   "Build an overlay between BEG and END using IMAGE file.
 Argument IMAGETYPE is the extension of the displayed image,
 as a string.  It defaults to \"png\"."
@@ -16117,7 +16119,8 @@ as a string.  It defaults to \"png\"."
 			 (delete-overlay o))))
     (overlay-put ov
 		 'display
-		 (list 'image :type imagetype :file image :ascent 'center))))
+		 `(image :type ,imagetype :file ,image :ascent center
+			 :scale ,(or scale 1.0)))))
 
 (defun org-clear-latex-preview (&optional beg end)
   "Remove all overlays with LaTeX fragment images in current buffer.
@@ -16655,6 +16658,18 @@ SNIPPETS-P indicates if this is run to create snippet images for HTML."
 ;; image overlays will never be cleared by `org-toggle-inline-images'.
 (put 'org-inline-image-overlays 'permanent-local t)
 
+(defun org--get-image-dpi (file-or-data &optional data-p)
+  (if data-p
+      (let ((temp-file (make-temp-file "" nil nil file-or-data)))
+	(unwind-protect (org--get-image-dpi temp-file)
+	  (delete-file temp-file)))
+    (float
+     (string-to-number
+      (shell-command-to-string
+       (format
+	"magick identify -units PixelsPerInch -format \"%%[resolution.y]\" %s"
+	(shell-quote-argument file-or-data)))))))
+
 (defun org--inline-image-overlays (&optional beg end)
   "Return image overlays between BEG and END."
   (let* ((beg (or beg (point-min)))
@@ -16729,7 +16744,7 @@ right    Right-align image previews."
 	  (const :tag "Right align image previews" right))
   :safe #'symbolp)
 
-(defun org--create-inline-image (file width)
+(defun org--create-inline-image (file width &optional scale)
   "Create image located at FILE, or return nil.
 WIDTH is the width of the image.  The image may not be created
 according to the value of `org-display-remote-inline-images'."
@@ -16749,7 +16764,9 @@ according to the value of `org-display-remote-inline-images'."
 	    (other
 	     (message "Invalid value of `org-display-remote-inline-images': %S"
 		      other)
-	     nil))))
+	     nil)))
+	 (image-dpi (org--get-image-dpi file-or-data remote?))
+	 (display-dpi (float (org--get-display-dpi))))
     (when file-or-data
       (create-image file-or-data
 		    (and (image-type-available-p 'imagemagick)
@@ -16766,7 +16783,7 @@ according to the value of `org-display-remote-inline-images'."
                       (`nil nil)
                       (_ (error "Unsupported value of `org-image-max-width': %S"
                                 org-image-max-width)))
-                    :scale 1))))
+                    :scale (* (or scale 1.0) (/ display-dpi image-dpi))))))
 
 (defun org-display-inline-images (&optional include-linked refresh beg end)
   "Display inline images.
