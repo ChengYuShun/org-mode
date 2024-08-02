@@ -16661,13 +16661,16 @@ SNIPPETS-P indicates if this is run to create snippet images for HTML."
 (defun org--get-image-dpi (file-or-data &optional data-p)
   "Get the DPI of a bitmap image, if any.
 
-If the image is a vector graphic, return nil."
-  (if data-p
-      (unless (string-prefix-p "<?xml" file-or-data)
+If the image is a vector graphic, return nil.  On macOS, however,
+the DPI for vector graphics is 72.0, because each point will be
+mapped to a pixel (actually a point in Apple's terms, which Emacs
+considers as a pixel)."
+  (if (eq 'svg (image-type file-or-data nil data-p))
+      (when (eq system-type 'darwin) 72.0)
+    (if data-p
 	(let ((temp-file (make-temp-file "" nil nil file-or-data)))
 	  (unwind-protect (org--get-image-dpi temp-file)
-	    (delete-file temp-file))))
-    (unless (equal (f-read-bytes file-or-data 0 5) "<?xml")
+	    (delete-file temp-file)))
       (let* ((command
 	      (format
 	       (concat "magick identify -units PixelsPerInch "
