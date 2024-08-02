@@ -16659,16 +16659,24 @@ SNIPPETS-P indicates if this is run to create snippet images for HTML."
 (put 'org-inline-image-overlays 'permanent-local t)
 
 (defun org--get-image-dpi (file-or-data &optional data-p)
+  "Get the DPI of a bitmap image, if any.
+
+If the image is a vector graphic, return nil."
   (if data-p
-      (let ((temp-file (make-temp-file "" nil nil file-or-data)))
-	(unwind-protect (org--get-image-dpi temp-file)
-	  (delete-file temp-file)))
-    (float
-     (string-to-number
-      (shell-command-to-string
-       (format
-	"magick identify -units PixelsPerInch -format \"%%[resolution.y]\" %s"
-	(shell-quote-argument file-or-data)))))))
+      (unless (string-prefix-p "<?xml" file-or-data)
+	(let ((temp-file (make-temp-file "" nil nil file-or-data)))
+	  (unwind-protect (org--get-image-dpi temp-file)
+	    (delete-file temp-file))))
+    (unless (equal (f-read-bytes file-or-data 0 5) "<?xml")
+      (let* ((command
+	      (format
+	       (concat "magick identify -units PixelsPerInch "
+		       "-format \"%%[resolution.y]\" %s 2>/dev/null")
+	       (shell-quote-argument file-or-data)))
+	     (output (shell-command-to-string command))
+	     (number (string-to-number output)))
+	(unless (eql number 0)
+	  (float number))))))
 
 (defun org--inline-image-overlays (&optional beg end)
   "Return image overlays between BEG and END."
@@ -16766,7 +16774,9 @@ according to the value of `org-display-remote-inline-images'."
 		      other)
 	     nil)))
 	 (image-dpi (org--get-image-dpi file-or-data remote?))
-	 (display-dpi (float (org--get-display-dpi))))
+	 (display-dpi (float (org--get-display-dpi)))
+	 (scale (* (or scale 1.0)
+		   (if image-dpi (/ display-dpi image-dpi) 1))))
     (when file-or-data
       (create-image file-or-data
 		    (and (image-type-available-p 'imagemagick)
@@ -16783,7 +16793,7 @@ according to the value of `org-display-remote-inline-images'."
                       (`nil nil)
                       (_ (error "Unsupported value of `org-image-max-width': %S"
                                 org-image-max-width)))
-                    :scale (* (or scale 1.0) (/ display-dpi image-dpi))))))
+                    :scale scale))))
 
 (defun org-display-inline-images (&optional include-linked refresh beg end)
   "Display inline images.
