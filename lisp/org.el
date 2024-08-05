@@ -16107,8 +16107,12 @@ at point."
 
 (defun org--make-preview-overlay (beg end image &optional imagetype scale)
   "Build an overlay between BEG and END using IMAGE file.
+
 Argument IMAGETYPE is the extension of the displayed image,
-as a string.  It defaults to \"png\"."
+as a string.  It defaults to \"png\".
+
+SCALE is the scaling factor that will be applied to the image,
+which defaults to 1.0."
   (let ((ov (make-overlay beg end))
 	(imagetype (or (intern imagetype) 'png)))
     (overlay-put ov 'org-overlay-type 'org-latex-overlay)
@@ -16342,16 +16346,21 @@ Some of the options can be changed using the variable
 		  (error "Unknown conversion process %s for LaTeX fragments"
 			 processing-type)))))))))))
 
-(defun org-place-formula-image (link block-type beg end value overlays movefile imagetype)
+(defun org-place-formula-image (link block-type beg end value overlays
+				movefile imagetype &optional scale)
   "Place an overlay from BEG to END showing MOVEFILE.
-The overlay will be above BEG if OVERLAYS is non-nil."
+
+The overlay will be above BEG if OVERLAYS is non-nil.
+
+SCALE is the scaling factor that will be applied to the image."
   (if overlays
-      (progn
+      (let ((scale (org--get-image-scale movefile nil scale
+					 imagetype)))
         (dolist (o (overlays-in beg end))
           (when (eq (overlay-get o 'org-overlay-type)
                     'org-latex-overlay)
             (delete-overlay o)))
-        (org--make-preview-overlay beg end movefile imagetype)
+        (org--make-preview-overlay beg end movefile imagetype scale)
         (goto-char end))
     (delete-region beg end)
     (insert
@@ -16559,7 +16568,7 @@ a HTML file."
 	    (org-compile-file
 	     image-input-file image-converter image-output-type err-msg log-buf
 	     `((?D . ,(shell-quote-argument (format "%s" dpi)))
-	       (?S . ,(shell-quote-argument (format "%s" (/ dpi 140.0))))))))
+	       (?S . ,(shell-quote-argument (format "%s" scale)))))))
       (copy-file image-output-file tofile 'replace)
       (dolist (e post-clean)
 	(when (file-exists-p (concat texfilebase e))
@@ -16658,15 +16667,48 @@ SNIPPETS-P indicates if this is run to create snippet images for HTML."
 ;; image overlays will never be cleared by `org-toggle-inline-images'.
 (put 'org-inline-image-overlays 'permanent-local t)
 
-(defun org--get-image-dpi (file-or-data &optional data-p)
-  "Get the DPI of a bitmap image, if any.
+(defun org--svg-no-unit (file-or-data data-p)
+  "Whether the SVG has no unit.
 
-If the image is a vector graphic, return nil.  On macOS, however,
-the DPI for vector graphics is 72.0, because each point will be
-mapped to a pixel (actually a point in Apple's terms, which Emacs
-considers as a pixel)."
-  (if (eq 'svg (image-type file-or-data nil data-p))
-      (when (eq system-type 'darwin) 72.0)
+This only works if the SVG explicitly sets its overall width or
+height."
+  (let ((unit nil))
+    (if data-p
+	(progn
+	  (string-match
+	   "\\(?:width\\|height\\)=\"[0-9.]*\\([^\"]*\\)\""
+	   file-or-data)
+	  (setq unit (match-string 1)))
+       (let* ((command nil))
+	 (setq
+	  command
+	  (concat
+	   "gawk "
+	   (shell-quote-argument
+	    "match($0, /(width|height)=\"[0-9.]*([^\"]*)\"/, arr) {
+               printf arr[2]
+               exit
+             }")
+	   " "
+	   (shell-quote-argument file-or-data)))
+	 (setq unit (shell-command-to-string command))))
+    (member unit '("" "px"))))
+
+(defun org--get-image-dpi (file-or-data &optional data-p type)
+  "Get the DPI of a bitmap image as float, if any.
+
+If the image is an SVG, return nil.  On macOS, however, if the
+SVG defaults to a physical unit, return 72.0, since each 1/72
+inch will be mapped to a pixel (actually a point in Apple's
+terms, which Emacs considers as a pixel).
+
+You may supply a string TYPE indicating the type of the image,
+which by default is the print name of the symbol returned by
+`image-type`."
+  (if (equal "svg" (or type (symbol-name (image-type file-or-data nil data-p))))
+      (when (and (eq system-type 'darwin)
+		 (not (org--svg-no-unit file-or-data data-p)))
+	72.0)
     (if data-p
 	(let ((temp-file (make-temp-file "" nil nil file-or-data)))
 	  (unwind-protect (org--get-image-dpi temp-file)
@@ -16680,6 +16722,17 @@ considers as a pixel)."
 	     (number (string-to-number output)))
 	(unless (eql number 0)
 	  (float number))))))
+
+(defun org--get-image-scale (file-or-data &optional data-p scale type)
+  "Calculate the scaling factor for an image as float.
+
+IMAGE-TYPE is a string containing the type of the image, which
+should be consistent with the name of the symbol returned by
+`image-type'."
+  (let* ((image-dpi (org--get-image-dpi file-or-data data-p type))
+	 (display-dpi (float (org--get-display-dpi))))
+    (* (or scale 1.0)
+       (if image-dpi (/ display-dpi image-dpi) 1.0))))
 
 (defun org--inline-image-overlays (&optional beg end)
   "Return image overlays between BEG and END."
@@ -16776,10 +16829,7 @@ according to the value of `org-display-remote-inline-images'."
 	     (message "Invalid value of `org-display-remote-inline-images': %S"
 		      other)
 	     nil)))
-	 (image-dpi (org--get-image-dpi file-or-data remote?))
-	 (display-dpi (float (org--get-display-dpi)))
-	 (scale (* (or scale 1.0)
-		   (if image-dpi (/ display-dpi image-dpi) 1))))
+	 (scale (org--get-image-scale file-or-data remote? scale)))
     (when file-or-data
       (create-image file-or-data
 		    (and (image-type-available-p 'imagemagick)
