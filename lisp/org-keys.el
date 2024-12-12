@@ -218,7 +218,8 @@
 (declare-function org-toggle-radio-button "org" (&optional arg))
 (declare-function org-toggle-comment "org" ())
 (declare-function org-toggle-fixed-width "org" ())
-(declare-function org-toggle-inline-images "org" (&optional include-linked beg end))
+(declare-function org-link-preview "ol" (&optional arg beg end))
+(declare-function org-link-preview-refresh "ol" ())
 (declare-function org-latex-preview "org" (&optional arg))
 (declare-function org-toggle-narrow-to-subtree "org" ())
 (declare-function org-toggle-ordered-property "org" ())
@@ -232,6 +233,7 @@
 (declare-function org-update-statistics-cookies "org" (all))
 (declare-function org-yank "org" (&optional arg))
 (declare-function orgtbl-ascii-plot "org-table" (&optional ask))
+(declare-function outline-up-heading "outline" (arg &optional invisible-ok))
 
 
 
@@ -409,6 +411,8 @@ COMMANDS is a list of alternating OLDDEF NEWDEF command names."
 (define-key org-mode-map [remap outline-previous-visible-heading]
   #'org-previous-visible-heading)
 (define-key org-mode-map [remap outline-show-children] #'org-fold-show-children)
+(defalias 'org-up-heading #'outline-up-heading)
+(define-key org-mode-map [remap outline-up-heading] #'org-up-heading)
 
 ;;;; Make `C-c C-x' a prefix key
 (org-defkey org-mode-map (kbd "C-c C-x") (make-sparse-keymap))
@@ -461,6 +465,37 @@ COMMANDS is a list of alternating OLDDEF NEWDEF command names."
 (org-defkey org-mode-map (kbd "C-S-<left>") #'org-shiftcontrolleft)
 (org-defkey org-mode-map (kbd "C-S-<up>") #'org-shiftcontrolup)
 (org-defkey org-mode-map (kbd "C-S-<down>") #'org-shiftcontroldown)
+
+;;; Repeat-mode map.
+(defvar org-navigation-repeat-map (make-sparse-keymap)
+  "Repeat keymap for navigation commands.")
+(org-defkey org-navigation-repeat-map (kbd "b") #'org-backward-heading-same-level)
+(org-defkey org-navigation-repeat-map (kbd "f") #'org-forward-heading-same-level)
+(org-defkey org-navigation-repeat-map (kbd "n") #'org-next-visible-heading)
+(org-defkey org-navigation-repeat-map (kbd "p") #'org-previous-visible-heading)
+(org-defkey org-navigation-repeat-map (kbd "u") #'org-up-heading)
+(map-keymap
+ (lambda (_key cmd)
+   (put cmd 'repeat-map 'org-navigation-repeat-map))
+ org-navigation-repeat-map)
+
+(defvar org-link-navigation-repeat-map (make-sparse-keymap)
+  "Repeat keymap for link navigation commands.")
+(org-defkey org-link-navigation-repeat-map (kbd "n") #'org-next-link)
+(org-defkey org-link-navigation-repeat-map (kbd "p") #'org-previous-link)
+(map-keymap
+ (lambda (_ cmd)
+   (put cmd 'repeat-map 'org-link-navigation-repeat-map))
+ org-link-navigation-repeat-map)
+
+(defvar org-block-navigation-repeat-map (make-sparse-keymap)
+  "Repeat keymap for block navigation commands.")
+(org-defkey org-block-navigation-repeat-map (kbd "f") #'org-next-block)
+(org-defkey org-block-navigation-repeat-map (kbd "b") #'org-previous-block)
+(map-keymap
+ (lambda (_ cmd)
+   (put cmd 'repeat-map 'org-block-navigation-repeat-map))
+ org-block-navigation-repeat-map)
 
 ;;;; Extra keys for TTY access.
 
@@ -618,8 +653,8 @@ COMMANDS is a list of alternating OLDDEF NEWDEF command names."
 (org-defkey org-mode-map (kbd "C-c C-x x") #'org-dynamic-block-insert-dblock)
 (org-defkey org-mode-map (kbd "C-c C-x C-u") #'org-dblock-update)
 (org-defkey org-mode-map (kbd "C-c C-x C-l") #'org-latex-preview)
-(org-defkey org-mode-map (kbd "C-c C-x C-v") #'org-toggle-inline-images)
-(org-defkey org-mode-map (kbd "C-c C-x C-M-v") #'org-redisplay-inline-images)
+(org-defkey org-mode-map (kbd "C-c C-x C-v") #'org-link-preview)
+(org-defkey org-mode-map (kbd "C-c C-x C-M-v") #'org-link-preview-refresh)
 (org-defkey org-mode-map (kbd "C-c C-x \\") #'org-toggle-pretty-entities)
 (org-defkey org-mode-map (kbd "C-c C-x C-b") #'org-toggle-checkbox)
 (org-defkey org-mode-map (kbd "C-c C-x C-r") #'org-toggle-radio-button)

@@ -345,5 +345,144 @@ body
        (should-not (org-element-contents section))
        (should (eq first-heading (org-element-parent section)))))))
 
+
+;;; References
+
+(ert-deftest test-ox-texinfo/references ()
+  "Test references with manual and automatic descriptions."
+  (should
+   (org-test-with-temp-text
+       (string-join
+        (list "* A"
+              ":PROPERTIES:"
+              ":ALT_TITLE: B"
+              ":END:"
+              "[[A]]"
+              "[[A][B]]"
+              "[[A][C]]"
+              "  ....")
+        "\n")
+     (let ((export-buffer "*Test Texinfo Export*")
+           (org-export-show-temporary-export-buffer nil))
+       (org-export-to-buffer 'texinfo export-buffer
+         nil nil nil nil nil
+         #'texinfo-mode)
+       (with-current-buffer export-buffer
+         (goto-char (point-min))
+         (and
+          (re-search-forward "@ref{B}")
+          (re-search-forward "@ref{B, , B}")
+          (re-search-forward "@ref{B, , C}")))))))
+
+
+;;; Headings with links
+
+(ert-deftest test-ox-texinfo/headings-with-links ()
+  "Test node and chapter names."
+  (should
+   (org-test-with-temp-text
+       (string-join
+        (list "* Heading 1"
+              "  ...."
+              "* Heading 2 ([[* Heading 1][Heading 1]])"
+              "  ....")
+        "\n")
+     (let ((export-buffer "*Test Texinfo Export*")
+           (org-export-show-temporary-export-buffer nil))
+       (org-export-to-buffer 'texinfo export-buffer
+         nil nil nil nil nil
+         #'texinfo-mode)
+       (with-current-buffer export-buffer
+         (goto-char (point-min))
+         (and
+          (re-search-forward "^* Heading 1::$")
+          (re-search-forward "^* Heading 2 (Heading 1)::$")
+          (re-search-forward "^@node Heading 1$")
+          (re-search-forward "^@chapter Heading 1$")
+          (re-search-forward "^@node Heading 2 (Heading 1)$")
+          (re-search-forward
+           "^@chapter Heading 2 (@ref{Heading 1, , Heading 1})$")))))))
+
+
+
+;;; Definitions
+
+(ert-deftest test-ox-texinfo/definition ()
+  "Test definitions."
+  (should
+   (org-test-with-temp-text
+       (string-join
+        (list "- Variable: name ::"
+              "  Description")
+        "\n")
+     (let ((export-buffer "*Test Texinfo Export*")
+           (org-export-show-temporary-export-buffer nil))
+       (org-export-to-buffer 'texinfo export-buffer
+         nil nil nil nil nil
+         #'texinfo-mode)
+       (with-current-buffer export-buffer
+         (goto-char (point-min))
+         (and
+          (re-search-forward "@defvar name")
+          (re-search-forward "Description")
+          (re-search-forward "@end defvar"))))))
+  ;; Edge case: Variable name = nil
+  (should
+   (org-test-with-temp-text
+       (string-join
+        (list "- Variable: nil ::"
+              "  Description")
+        "\n")
+     (let ((export-buffer "*Test Texinfo Export*")
+           (org-export-show-temporary-export-buffer nil))
+       (org-export-to-buffer 'texinfo export-buffer
+         nil nil nil nil nil
+         #'texinfo-mode)
+       (with-current-buffer export-buffer
+         (goto-char (point-min))
+         (and
+          (re-search-forward "@defvar nil")
+          (re-search-forward "Description")
+          (re-search-forward "@end defvar"))))))
+  ;; Function name containing markup
+  (should
+   (org-test-with-temp-text
+       (string-join
+        (list "- Function: ~foo_bar~ arg ::"
+              "  Description")
+        "\n")
+     (let ((export-buffer "*Test Texinfo Export*")
+           (org-export-show-temporary-export-buffer nil))
+       (org-export-to-buffer 'texinfo export-buffer
+         nil nil nil nil nil
+         #'texinfo-mode)
+       (with-current-buffer export-buffer
+         (goto-char (point-min))
+         (and
+          (re-search-forward "@defun @code{foo_bar} arg")
+          (re-search-forward "Description")
+          (re-search-forward "@end defun")))))))
+
+
+;;; Escaping
+
+(ert-deftest test-ox-texinfo/escape-special-characters ()
+  "Test escaping special characters."
+  (should
+   (org-test-with-temp-text
+       (string-join
+        (list "[[https://example.com][Foo, Bar]]"
+              "[[https://example.com][Foo, Bar}]]")
+        "\n")
+     (let ((export-buffer "*Test Texinfo Export*")
+           (org-export-show-temporary-export-buffer nil))
+       (org-export-to-buffer 'texinfo export-buffer
+         nil nil nil nil nil
+         #'texinfo-mode)
+       (with-current-buffer export-buffer
+         (goto-char (point-min))
+         (should (search-forward "@uref{https://example.com, Foo@comma{} Bar}"))
+         (should (search-forward "@uref{https://example.com, Foo@comma{} Bar@}}")))))))
+
 (provide 'test-ox-texinfo)
 ;;; test-ox-texinfo.el end here

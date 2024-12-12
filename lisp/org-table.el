@@ -586,7 +586,7 @@ This works for both table types.")
   "Match a reference that needs translation, for reference display.")
 
 (defconst org-table--separator-space-pre
-  (propertize " " 'display '(space :relative-width 1))
+  (propertize " " 'display '(space :relative-width 1) 'rear-nonsticky t)
   "Space used in front of fields when aligning the table.
 This space serves as a segment separator for the purposes of the
 bidirectional reordering.
@@ -622,7 +622,7 @@ This variable is set by `org-before-change-function'.
 `org-table-align' sets it back to nil.")
 
 (defvar orgtbl-after-send-table-hook nil
-  "Hook for functions attaching to `C-c C-c', if the table is sent.
+  "Hook for functions attaching to \\`C-c C-c', if the table is sent.
 This can be used to add additional functionality after the table is sent
 to the receiver position, otherwise, if table is not sent, the functions
 are not run.")
@@ -3709,7 +3709,7 @@ With prefix ARG, apply the new formulas to the table."
     (org-table-store-formulas eql)
     (set-marker pos nil)
     (set-marker source nil)
-    (when-let ((window (get-buffer-window "*Edit Formulas*" t)))
+    (when-let* ((window (get-buffer-window "*Edit Formulas*" t)))
       (quit-window 'kill window))
     (when (get-buffer "*Edit Formulas*") (kill-buffer "*Edit Formulas*"))
     (if arg
@@ -5423,7 +5423,7 @@ conflicting binding to this key outside `orgtbl-mode'."
     (org-table-next-row)))
 
 (defun orgtbl-self-insert-command (N)
-  "Like `self-insert-command', use overwrite-mode for whitespace in tables.
+  "Like `self-insert-command', use `overwrite-mode' for whitespace in tables.
 If the cursor is in a table looking at whitespace, the whitespace is
 overwritten, and the table is not marked as requiring realignment."
   (interactive "p")
@@ -5658,7 +5658,7 @@ First element has index 0, or I0 if given."
   "Extract first X table rows from AST.
 X is taken from :skip property in INFO plist.
 Return the modified AST."
-  (when-let ((skip (plist-get info :skip)))
+  (when-let* ((skip (plist-get info :skip)))
     (unless (wholenump skip) (user-error "Wrong :skip value"))
     (let ((n 0))
       (org-element-map ast 'table-row
@@ -5675,7 +5675,7 @@ Return the modified AST."
 X is taken from :skipcols property in INFO plist.
 Special columns are always ignored.
 Return the modified AST."
-  (when-let ((skipcols (plist-get info :skipcols)))
+  (when-let* ((skipcols (plist-get info :skipcols)))
     (unless (consp skipcols) (user-error "Wrong :skipcols value"))
     (org-element-map ast 'table
       (lambda (table)
@@ -5840,6 +5840,8 @@ This may be either a string or a function of two arguments:
       ;; We disable the usual pre-processing and post-processing,
       ;; i.e., hooks, Babel code evaluation, and macro expansion.
       ;; Only backend specific filters are retained.
+      ;; We _do not_ disable `org-export-filter-parse-tree-functions'
+      ;; (historically).
       (let ((org-export-before-processing-functions nil)
             (org-export-replace-macros nil)
             (org-export-use-babel nil)
@@ -5847,7 +5849,9 @@ This may be either a string or a function of two arguments:
             (org-export-process-citations nil)
             (org-export-expand-links nil)
             (org-export-filter-parse-tree-functions
-             '(orgtbl--skip orgtbl--skipcols))
+             (append
+              '(orgtbl--skip orgtbl--skipcols)
+              org-export-filter-parse-tree-functions))
             (org-export-filters-alist
              '((:filter-parse-tree . org-export-filter-parse-tree-functions))))
         (when (or (not backend) (plist-get params :raw)) (require 'ox-org))
@@ -6160,7 +6164,7 @@ supported.  It is also possible to use the following one:
 
 ;;;###autoload
 (defun orgtbl-to-orgtbl (table params)
-  "Convert the `orgtbl-mode' TABLE into another orgtbl-mode table.
+  "Convert the `orgtbl-mode' TABLE into another `orgtbl-mode' table.
 
 TABLE is a list, each entry either the symbol `hline' for
 a horizontal separator line, or a list of fields for that line.

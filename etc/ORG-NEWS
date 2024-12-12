@@ -18,6 +18,49 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 # require user action for most Org mode users.
 # Sorted from most important to least important.
 
+*** =C-c C-x C-v= command toggling inline image display has been reworked
+
+Previously, =C-c C-x C-v= always toggled image display in the whole
+buffer (or narrowed part of the buffer).  With prefix argument, it
+also forced displaying image links with description.
+
+Now, =C-c C-x C-v= is bound to a new command ~org-link-preview~, which
+uses different defaults:
+
+1. When the region is active, images in the region are previewed
+
+2. Otherwise, if there is an image at point, it is toggled.  If there
+   is no image at point, images in the current entry are previewed
+
+3. With the =C-u= argument, image previews in the active region or at
+   point are cleared instead
+
+4. The =C-u C-u= argument unconditionally shows all images in the
+   accessible portion of the buffer
+
+5. The =C-u C-u C-u= argument unconditionally clears all images in the
+   accessible portion of the buffer
+
+6. Displaying images over links with description can be forced using
+   numeric argument:
+   - ~C-u 1~ for toggling all images at point/current entry
+   - ~C-u 11~ for toggling all images in buffer
+
+(The first five of these prefix arg behaviors are the same as that of
+the ~org-latex-preview~ command.)
+
+In addition to images, ~org-link-preview~ can also be used to preview
+Org links of all types for which preview behavior is defined, see
+[[#link-preview][previews for arbitrary link types]].
+
+The old ~org-toggle-inline-images~ command is obsolete but still
+available.  You can bind it back to =C-c C-x C-v= by adding the
+following to your config:
+#+begin_src emacs-lisp
+(eval-after-load 'org-keys
+  (org-defkey org-mode-map (kbd "C-c C-x C-v") #'org-toggle-inline-images))
+#+end_src
+
 *** Org mode may throw an error when attempting to include remote unsafe resource noninteractively
 
 Previously, when ~org-resource-download-policy~ is ~ask~ (default),
@@ -26,10 +69,39 @@ remote resources in the =#+include:='s.  Now, an error is thrown to
 avoid seemingly ignored =#+include= statements when publishing via
 batch scripts.
 
+*** Diary-style timestamps are exported together with active timestamps
+
+~org-export-with-timestamps~ and ~org-icalendar-with-timestamps~ now
+treat diary-style timestamps as a type of active timestamp for
+purposes of export.
+
+This mainly affects iCalendar export, where diary timestamps will now
+be included when only active timestamps are exported (the default).
+
+This should have minimal impact on non-iCalendar exporters, since
+~org-export-with-timestamps~ was already ~t~ by default.  However,
+users who manually set ~org-export-with-timestamps~ to ~active~ will
+now have diary timestamps included as well.
+
 ** New features
 
 # We list the most important features, and the features that may
 # require user action to be used.
+
+*** All Org link types can be previewed
+:PROPERTIES:
+:CUSTOM_ID: link-preview
+:END:
+
+Org links support a new parameter =:preview= that can be used to
+preview arbitrary link types.  The value of this parameter should be a
+function that is called to preview links of the corresponding type
+(see ~org-link-parameters~).
+
+*** Alignment of image previews can be customized
+
+This is not a new feature.  It has been added in Org 9.7, but not
+documented in the news.  See [[#preview-align][restrospectively added news entry]].
 
 *** Beamer export supports setting frame subtitles
 If a headline is exported as a frame, and has its =BEAMER_SUBTITLE=
@@ -41,11 +113,45 @@ You can now create links to =shortdoc= documentation groups for Emacs
 Lisp functions (see =M-x shortdoc-display-group=).  Requires Emacs 28
 or newer.
 
+*** Some navigation commands can now be repeated
+
+When ~repeat-mode~ is turned on, the following navigation commands can
+be repeated:
+
+| Command                           | Key binding            | Repeat key   |
+|-----------------------------------+------------------------+--------------|
+| ~org-next-visible-heading~        | {{{kbd(C-c C-n)}}}     | {{{kbd(n)}}} |
+| ~org-previous-visible-heading~    | {{{kbd(C-c C-p)}}}     | {{{kbd(p)}}} |
+| ~org-forward-heading-same-level~  | {{{kbd(C-c C-f)}}}     | {{{kbd(f)}}} |
+| ~org-backward-heading-same-level~ | {{{kbd(C-c C-b)}}}     | {{{kbd(b)}}} |
+| ~org-up-heading~                  | {{{kbd(C-c C-u)}}}     | {{{kbd(u)}}} |
+| ~org-next-block~                  | {{{kbd(C-c M-f)}}}     | {{{kbd(f)}}} |
+| ~org-previous-block~              | {{{kbd(C-c M-b)}}}     | {{{kbd(b)}}} |
+| ~org-next-link~                   | {{{kbd(C-c C-x C-n)}}} | {{{kbd(n)}}} |
+| ~org-previous-link~               | {{{kbd(C-c C-x C-p)}}} | {{{kbd(p)}}} |
+
+The keybindings in the repeat-maps can be changed by customizing
+~org-navigation-repeat-map~, ~org-link-navigation-repeat-map~, and
+~org-block-navigation-repeat-map~.
+
+See the new [[info:org#Repeating commands]["Repeating commands"]] section in Org mode manual.
+
 ** New and changed options
 
 # Chanes deadling with changing default values of customizations,
 # adding new customizations, or changing the interpretation of the
 # existing customizations.
+
+*** New option ~org-link-preview-batch-size~
+
+Org link previews are generated asynchronously and a few at a time, in
+batches.  This option controls the number of links that are previewed
+in each batch.
+
+*** New option ~org-link-preview-delay~
+
+Org link previews are generated asynchronously.  This option controls
+the minimum idle time in seconds between previews of batches of links.
 
 *** Allow disabling macro replacement during export
 
@@ -89,6 +195,26 @@ bibliography format requires them to be written in title-case.
 
 # This also includes changes in function behavior from Elisp perspective.
 
+*** New command ~org-link-preview~ to preview Org links
+
+This command replaces ~org-toggle-inline-images~, which is now
+obsolete.
+
+*** New command ~org-link-preview-region~ to preview Org links in a region or the buffer
+
+This command replaces ~org-display-inline-images~, which is now
+obsolete.
+
+*** New command ~org-link-preview-clear~ to clear Org link previews in a region or the buffer
+
+This command replaces ~org-remove-inline-images~, which is now
+obsolete.
+
+*** New command ~org-link-preview-refresh~ to refresh Org link previews in the buffer
+
+This command replaces ~org-redisplay-inline-images~, which is now
+obsolete.
+
 *** ob-sqlite: Added ability to open a database in readonly mode
 
 Added option :readonly to ob-sqlite.
@@ -113,7 +239,79 @@ accept the INFO channel and return a string.  This makes it possible
 to dynamically generate the content of the resulting ~<head>~ tag in
 the resulting HTML document.
 
+*** ob-comint: New optional arguments controlling prompt handling
+
+The new argument ~prompt-handling~ in ~org-babel-comint-with-output~
+and ~org-babel-comint-async-register~ allows Babel languages to
+specify how prompts should be handled in comint output.  If equal to
+~filter-prompts~, prompts are removed from output before it is passed
+on to language-specific processing.  If equal to
+~disable-prompt-filtering~, then the prompt filtering is skipped.  If
+unset, then the default behavior is the same as ~filter-prompts~ for
+backwards compatibility.
+
+Prompt filtering is needed for some Babel languages, such as ob-shell,
+which leave extra prompts in the output as a side effect of
+evaluation.  However other Babel languages, like ob-python, don't
+leave extra prompts after evaluation, and skipping the prompt
+filtering can be more robust for such languages (as this avoids
+removing false positive prompts).
+
+** Removed or renamed functions and variables
+
+*** ~org-cycle-display-inline-images~ is renamed to ~org-cycle-display-link-previews~
+
+Inline image previews in Org mode are now provided by the more general
+link previews feature.  The behavior with regards to image links is
+unchanged.
+
+*** ~org-cycle-inline-images-display~ is renamed to ~org-cycle-link-previews-display~
+
+The behavior is unchanged, except in that the new variable now affects
+previews of supported link types besides image links.
+
+*** ~org-startup-with-inline-images~ is renamed to ~org-startup-with-link-previews~
+
+The behavior is unchanged, except in that the new variable now affects
+previews of supported link types besides image links.
+
 ** Miscellaneous
+*** Org mode no longer prevents =flyspell= from spell-checking inside =LOGBOOK= drawers
+
+Previously, spell-checking via =flyspell= was disabled inside
+=LOGBOOK= (or ~org-log-into-drawer~) drawers.  Now, it is no longer
+the case.  It can be useful to see spelling mistakes inside notes
+added via ~org-add-note~ command.
+
+*** ~ob-R~ and ~ob-julia~ no longer use ESS settings for working directory
+
+Previously, without =:dir= parameter, R and Julia code blocks could
+query for working directory during evaluation.  This was because
+~ess-ask-for-ess-directory~ setting was obeyed.
+
+Now, ~ess-ask-for-ess-directory~, ~ess-directory-function~, and
+~ess-directory~ are all ignored during code block evaluation (except
+when session is already running).  In other words, R and Julia code
+blocks now conform to the "16.4 Environment of a Code Block" section
+of Org mode manual that prescribes Org buffer directory or ~:dir~
+value to be used as working dir to run the code blocks.
+
+*** ~org-cancel-repeater~ now cancels all the repeaters under inside entry
+
+Previously, ~org-cacnel-repeater~ only canceled repeater in the first
+active timestamp inside heading.  Now, all the repeaters are
+cancelled.
+
+The function is renamed to ~org-cacnel-repeaters~ accordingly (the old
+name is still kept as an alias).
+
+*** ~org-refile~ now saves current position to Org mark ring when jumping to heading
+
+When ~org-refile~ is called with =C-u= or =C-u C-u= prefix argument
+(to jump to heading or to jump to the last refiled heading), it saves
+point to Org mark ring before jumping. Then, the user can return back
+via ~org-mark-ring-goto~.
+
 *** ~orgtbl-to-generic~ retains special rows when exporting to Org
 
 Previously, special table rows were unconditionally removed when
@@ -150,6 +348,12 @@ This way, attachments will remain accessible when opening symlinked Org file.
 
 When no attach dir exists, Org mode will still prefer creating it in
 the "default" directory - where the symlink is located.
+
+*** Texinfo exporter now supports links in headings
+
+The Texinfo exporter no longer removes links from headings.  This
+applies to all headings, below and above the =H= and =toc= export
+=#+OPTIONS:=.
 
 * Version 9.7
 
@@ -423,6 +627,29 @@ respected.
 
 Images dropped also respect the value of ~org-yank-image-save-method~
 when ~org-yank-dnd-method~ is =attach=.
+
+*** Alignment of image previews can be customized
+:PROPERTIES:
+:CUSTOM_ID: preview-align
+:END:
+
+Previously, all the image previews were always left-aligned.
+
+Now, you can customize image previews to be left-aligned, centered, or right-aligned.
+
+The customization can be done globally, via ~org-image-align~, or per
+image, using =#+attr_...:=.  Example:
+
+: #+attr_org: :align center
+: [[/path/to/image/file/png]]
+:
+: or
+:
+: #+attr_org: :center t
+: [[/path/to/image/file/png]]
+
+When =#+attr_org= is not present, ~:align~ and ~:center~ attributes
+from other =#+attr_...:= keywords will be used.
 
 *** =id:= links support search options; ~org-id-store-link~ adds search option by default
 
@@ -700,7 +927,7 @@ The old name is obsolete.
 
 ** New and changed options
 
-# Chanes deadling with changing default values of customizations,
+# Changes dealing with changing default values of customizations,
 # adding new customizations, or changing the interpretation of the
 # existing customizations.
 
@@ -763,7 +990,7 @@ This new hook runs when a note has been stored.
 Sorting of agenda items, tables, menus, headlines, etc can now be
 controlled using a new custom option ~org-sort-function~.
 
-By default, Org mode sorts things according to the operation system
+By default, Org mode sorts things according to the operating system
 language.  However, language sorting rules may or may not produce good
 results depending on the use case.  For example, multi-language
 documents may be sorted weirdly when sorting rules for system language
@@ -833,8 +1060,8 @@ Org-Org (=ox-org=) export.  The default value is ~t~.
 
 *** New option ~org-babel-comint-fallback-regexp-threshold~
 
-Org babel is often using Emacs' interactive REPL feature to implement
-:session functionality in code blocks. However, Emacs' REPLs use
+Org babel is often using Emacs's interactive REPL feature to implement
+:session functionality in code blocks.  However, Emacs's REPLs use
 heuristics to detect which lines in the REPL buffer correspond to
 output and which lines are user prompts.
 
@@ -2130,7 +2357,7 @@ When ~org-latex-src-block-backend~ is set to ~engraved~,
 =engrave-faces-latex= from [[http://elpa.gnu.org/packages/engrave-faces.html][engrave-faces]] is used to transcode source
 blocks to LaTeX. This requires the =fvextra=, =float=, and (by
 default, but not necessarily) =tcolorbox= LaTeX packages be
-installed. It uses Emacs' font-lock information, and so tends to
+installed. It uses Emacs's font-lock information, and so tends to
 produce results superior to Minted or Listings.
 *** Support for =#+include=-ing URLs
 
@@ -8321,7 +8548,7 @@ that Calc formulas can operate on them.
 
 **** org-ctags.el (Paul Sexton)
 
-     Targets like =<<my target>>= can now be found by Emacs' etag
+     Targets like =<<my target>>= can now be found by Emacs's etag
      functionality, and Org-mode links can be used to link to
      etags, also in non-Org-mode files.  For details, see the file
      /org-ctags.el/.

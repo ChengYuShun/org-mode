@@ -448,6 +448,8 @@ FORMAT and ARGS are passed to `message'."
                  buffer-or-file (error-message-string err)))
          nil)))))
 
+;; FIXME: `pp' is very slow when writing even moderately large datasets
+;; We should probably drop it or find some fast formatter.
 (defun org-persist--write-elisp-file (file data &optional no-circular pp)
   "Write elisp DATA to FILE."
   ;; Fsync slightly reduces the chance of an incomplete filesystem
@@ -459,7 +461,7 @@ FORMAT and ARGS are passed to `message'."
   ;; With all this in mind, we ensure `write-region-inhibit-fsync' is
   ;; set.
   ;;
-  ;; To read more about this, see the comments in Emacs' fileio.c, in
+  ;; To read more about this, see the comments in Emacs's fileio.c, in
   ;; particular the large comment block in init_fileio.
   (let ((write-region-inhibit-fsync t)
         ;; We set UTF-8 here and in `org-persist--read-elisp-file'
@@ -533,7 +535,10 @@ FORMAT and ARGS are passed to `message'."
 (org-persist-collection-let collection
   (and org-persist--index-hash
        (catch :found
-         (dolist (cont (cons container container))
+         (dolist (cont
+                  (if (listp (car container)) ; container group
+                      (cons container container)
+                    (list container)))
            (let (r)
              (setq r (or (gethash (cons cont associated) org-persist--index-hash)
                          (and path (gethash (cons cont (list :file path)) org-persist--index-hash))
@@ -541,13 +546,15 @@ FORMAT and ARGS are passed to `message'."
                          (and hash (gethash (cons cont (list :hash hash)) org-persist--index-hash))
                          (and key (gethash (cons cont (list :key key)) org-persist--index-hash))))
              (when (and r
-                        ;; Every element in CONTAINER matches
-                        ;; COLLECTION.
+                        ;; Every element in container group of
+                        ;; COLLECTION matches returned CONTAINER. 
                         (seq-every-p
                          (lambda (cont)
                            (org-persist-collection-let r
                              (member cont container)))
-                         container))
+                         (if (listp (car container))
+                             container
+                           (list container))))
                (throw :found r))))))))
 
 (defun org-persist--add-to-index (collection &optional hash-only)
@@ -566,7 +573,10 @@ Return PLIST."
             existing)
         (unless hash-only (push collection org-persist--index))
         (unless org-persist--index-hash (setq org-persist--index-hash (make-hash-table :test 'equal)))
-        (dolist (cont (cons container container))
+        (dolist (cont
+                 (if (listp (car container)) ; container group
+                     (cons container container)
+                   (list container)))
           (puthash (cons cont associated) collection org-persist--index-hash)
           (when path (puthash (cons cont (list :file path)) collection org-persist--index-hash))
           (when inode (puthash (cons cont (list :inode inode)) collection org-persist--index-hash))
@@ -579,7 +589,10 @@ Return PLIST."
   (let ((existing (org-persist--find-index collection)))
     (when existing
       (org-persist-collection-let collection
-        (dolist (cont (cons container container))
+        (dolist (cont
+                 (if (listp (car container)) ; container group
+                     (cons container container)
+                   (list container)))
           (unless (listp (car container))
             (org-persist-gc:generic cont collection)
             (dolist (afile (org-persist-associated-files:generic cont collection))
@@ -816,8 +829,8 @@ COLLECTION is the plist holding data collection."
   (let ((scope (nth 2 container)))
     (pcase scope
       ((pred stringp)
-       (when-let ((buf (or (get-buffer scope)
-                           (get-file-buffer scope))))
+       (when-let* ((buf (or (get-buffer scope)
+                            (get-file-buffer scope))))
          ;; FIXME: There is `buffer-local-boundp' introduced in Emacs 28.
          ;; Not using it yet to keep backward compatibility.
          (condition-case nil
@@ -827,8 +840,14 @@ COLLECTION is the plist holding data collection."
        (when (boundp (cadr container))
          (symbol-value (cadr container))))
       (`nil
-       (if-let ((buf (and (plist-get (plist-get collection :associated) :file)
-                          (get-file-buffer (plist-get (plist-get collection :associated) :file)))))
+       ;; FIXME: Here and in other places, we use `get-file-buffer'
+       ;; assuming that all the buffers with the same
+       ;; `buffer-file-name' are same.  However, this may not
+       ;; necessarily be the case in general and we may initiate
+       ;; writing cache in one buffer, but `get-file-buffer' may then
+       ;; return _another_ buffer (with the same `buffer-file-name').
+       (if-let* ((buf (and (plist-get (plist-get collection :associated) :file)
+                           (get-file-buffer (plist-get (plist-get collection :associated) :file)))))
            ;; FIXME: There is `buffer-local-boundp' introduced in Emacs 28.
            ;; Not using it yet to keep backward compatibility.
            (condition-case nil
@@ -906,7 +925,7 @@ Otherwise, return t."
     (let ((index-file
            (org-file-name-concat org-persist-directory org-persist-index-file)))
       (org-persist--merge-index-with-disk)
-      (org-persist--write-elisp-file index-file org-persist--index t t)
+      (org-persist--write-elisp-file index-file org-persist--index t)
       (setq org-persist--index-age
             (file-attribute-modification-time (file-attributes index-file)))
       index-file)))
@@ -1012,10 +1031,6 @@ the CONTAINER as well."
                      (remove container (plist-get collection :container)))
           (org-persist--add-to-index collection))))))
 
-(defvar org-persist--write-cache (make-hash-table :test #'equal)
-  "Hash table storing as-written data objects.
-
-This data is used to avoid reading the data multiple times.")
 (cl-defun org-persist-read (container &optional associated hash-must-match load &key read-related)
   "Restore CONTAINER data for ASSOCIATED.
 When HASH-MUST-MATCH is non-nil, do not restore data if hash for
@@ -1063,8 +1078,7 @@ CONTAINER as well.  For example:
       (unless (seq-find (lambda (v)
                           (run-hook-with-args-until-success 'org-persist-before-read-hook v associated))
                         (plist-get collection :container))
-        (setq data (or (gethash persist-file org-persist--write-cache)
-                       (org-persist--read-elisp-file persist-file)))
+        (setq data (org-persist--read-elisp-file persist-file))
         (when data
           (cl-loop for c in (plist-get collection :container)
                    with result = nil
@@ -1135,7 +1149,6 @@ When IGNORE-RETURN is non-nil, just return t on success without calling
         (let ((file (org-file-name-concat org-persist-directory (plist-get collection :persist-file)))
               (data (mapcar (lambda (c) (cons c (org-persist-write:generic c collection)))
                             (plist-get collection :container))))
-          (puthash file data org-persist--write-cache)
           (org-persist--write-elisp-file file data)
           (or ignore-return (org-persist-read container associated)))))))
 

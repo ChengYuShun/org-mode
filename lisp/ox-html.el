@@ -1735,7 +1735,7 @@ targets and targets."
 	   (and (memq type '(radio-target target))
 		(org-element-property :value datum))
 	   (org-element-property :name datum)
-	   (when-let ((id (org-element-property :ID datum)))
+	   (when-let* ((id (org-element-property :ID datum)))
 	     (concat org-html--id-attr-prefix id)))))
 
     (cond
@@ -2065,7 +2065,7 @@ INFO is a plist used as a communication channel."
           (when value
             (pcase symbol
               (`font
-               (when-let
+               (when-let*
                    ((value-new
                      (pcase value
                        ("TeX" "mathjax-tex")
@@ -2364,12 +2364,11 @@ is the language used for CODE, as a string, or nil."
      ((not (progn (require 'htmlize nil t)
 		(fboundp 'htmlize-region-for-paste)))
       ;; Emit a warning.
-      (warn "Cannot fontify source block (htmlize.el >= 1.34 required)")
+      (warn "Cannot fontify source block (htmlize.el >= 1.34 required).  Falling back to plain text.  (see `org-html-htmlize-output-type')")
       (org-html-encode-plain-text code))
      (t
       ;; Map language
-      (setq lang (or (assoc-default lang org-src-lang-modes) lang))
-      (let* ((lang-mode (and lang (intern (format "%s-mode" lang)))))
+      (let* ((lang-mode (and lang (org-src-get-lang-mode lang))))
 	(cond
 	 ;; Case 1: Language is not associated with any Emacs mode
 	 ((not (functionp lang-mode))
@@ -2710,7 +2709,7 @@ information."
   (let ((attributes (org-export-read-attribute :attr_html example-block)))
     (if (plist-get attributes :textarea)
 	(org-html--textarea-block example-block)
-      (if-let ((class-val (plist-get attributes :class)))
+      (if-let* ((class-val (plist-get attributes :class)))
           (setq attributes (plist-put attributes :class (concat "example " class-val)))
         (setq attributes (plist-put attributes :class "example")))
       (format "<pre%s>\n%s</pre>"

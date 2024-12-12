@@ -524,7 +524,7 @@ node or anchor name is unique."
 		(org-texinfo--sanitize-node
 		 (pcase (org-element-type datum)
 		   (`headline
-		    (org-texinfo--sanitize-title
+		    (org-texinfo--sanitize-title-reference
 		     (org-export-get-alt-title datum info) info))
 		   (`radio-target
 		    (org-export-data (org-element-contents datum) info))
@@ -571,12 +571,28 @@ periods, commas and colons."
 TITLE is a string or a secondary string.  INFO is the current
 export state, as a plist."
   (org-export-data-with-backend
+   title
+   (org-export-create-backend
+    :parent 'texinfo
+    :transcoders `((footnote-reference . ,#'ignore)
+                   (radio-target . ,(lambda (_r c _) c))
+                   (target . ,#'ignore)))
+   info))
+
+(defun org-texinfo--sanitize-title-reference (title info)
+  "Make TITLE suitable as a section reference.
+TITLE is a string or a secondary string.  INFO is the current
+export state, as a plist."
+  (org-export-data-with-backend
    title (org-export-toc-entry-backend 'texinfo) info))
 
 (defun org-texinfo--sanitize-content (text)
   "Escape special characters in string TEXT.
-Special characters are: @ { }"
-  (replace-regexp-in-string "[@{}]" "@\\&" text))
+Special characters are: @ { } ,"
+  (thread-last
+    text
+    (replace-regexp-in-string "[@{}]" "@\\&")
+    (replace-regexp-in-string "," "@comma{}")))
 
 (defun org-texinfo--wrap-float (value info &optional type label caption short)
   "Wrap string VALUE within a @float command.
@@ -627,7 +643,7 @@ Return new tree."
 	(let ((contents (org-element-contents plain-list))
 	      (items nil))
 	  (dolist (item contents)
-	    (pcase-let ((`(,cmd . ,args) (org-texinfo--match-definition item)))
+	    (pcase-let ((`(,cmd . ,args) (org-texinfo--match-definition item info)))
 	      (cond
 	       (cmd
 		(when items
@@ -643,16 +659,17 @@ Return new tree."
     info)
   tree)
 
-(defun org-texinfo--match-definition (item)
+(defun org-texinfo--match-definition (item &optional info)
   "Return a cons-cell if ITEM specifies a Texinfo definition command.
-The car is the command and the cdr is its arguments."
-  (let ((tag (car-safe (org-element-property :tag item))))
+The car is the command and the cdr is its arguments.
+INFO is the export INFO plist."
+  (let ((tag (org-export-data (org-element-property :tag item) info)))
     (and tag
 	 (stringp tag)
 	 (string-match org-texinfo--definition-command-regexp tag)
 	 (pcase-let*
 	     ((cmd (car (rassoc (match-string-no-properties 1 tag)
-				 org-texinfo--definition-command-alist)))
+				org-texinfo--definition-command-alist)))
 	      (`(,cmd ,category)
 	       (and cmd (save-match-data (split-string cmd " "))))
 	      (args (match-string-no-properties 2 tag)))
@@ -667,7 +684,11 @@ specified by CMD and ARGS."
     (org-element-insert-before
      (apply #'org-element-create 'special-block
 	    (list :type cmd
-		  :attr_texinfo (list (format ":options %s" args))
+                  :ox-texinfo--options args
+                  ;; Option can be nil that cannot be recorgnized
+                  ;; literally by `org-export-read-attribute', so we
+                  ;; use dedicated property instead
+		  ;; :attr_texinfo (list (format ":options %s" args))
 		  :post-blank (if contents 1 0))
 	    (mapc #'org-element-extract contents))
      plain-list))
@@ -1311,7 +1332,7 @@ nil."
 		    (replace-regexp-in-string
 		     "[ \t]*:+" ""
 		     (replace-regexp-in-string "," "@comma{}" description)))))
-    (if (or (not title) (equal title node-name))
+    (if (not title)
 	(format "@ref{%s}" node-name)
       (format "@ref{%s, , %s}" node-name title))))
 
@@ -1468,7 +1489,7 @@ a plist containing contextual information."
 	      ;; name.  Remove them.
 	      (replace-regexp-in-string
 	       "[ \t]*:+" ""
-	       (org-texinfo--sanitize-title
+	       (org-texinfo--sanitize-title-reference
 		(org-export-get-alt-title h info) info)))
 	     (node (org-texinfo--get-node h info))
 	     (entry (concat "* " title ":"
@@ -1563,7 +1584,7 @@ contextual information."
   "Transcode a TEXT string from Org to Texinfo.
 TEXT is the string to transcode.  INFO is a plist holding
 contextual information."
-  ;; First protect @, { and }.
+  ;; First protect @, {, }, and commas (,).
   (let ((output (org-texinfo--sanitize-content text)))
     ;; Activate smart quotes.  Be sure to provide original TEXT string
     ;; since OUTPUT may have been modified.
@@ -1676,7 +1697,10 @@ holding contextual information."
   "Transcode a SPECIAL-BLOCK element from Org to Texinfo.
 CONTENTS holds the contents of the block.  INFO is a plist used
 as a communication channel."
-  (let ((opt (org-export-read-attribute :attr_texinfo special-block :options))
+  (let ((opt (or
+              ;; See `org-texinfo--split-definition'
+              (org-element-property :ox-texinfo--options special-block)
+              (org-export-read-attribute :attr_texinfo special-block :options)))
 	(type (org-element-property :type special-block)))
     (format "@%s%s\n%s@end %s"
 	    type
@@ -2037,9 +2061,11 @@ Once computed, the results remain cached."
   (unless (boundp 'org-texinfo-supports-math--cache)
     (setq org-texinfo-supports-math--cache
           (let ((math-example "1 + 1 = 2"))
-            (let* ((input-file (make-temp-file "test" nil ".info"))
+            (let* ((input-file (make-temp-file "test" nil ".texi"))
+                   (output-file
+                    (concat (file-name-sans-extension input-file) ".info"))
                    (input-content (string-join
-                                   (list (format "@setfilename %s" input-file)
+                                   (list (format "@setfilename %s" output-file)
                                          "@node Top"
                                          "@displaymath"
                                          math-example
@@ -2050,7 +2076,8 @@ Once computed, the results remain cached."
               (when-let* ((output-file
                            ;; If compilation fails, consider math to
                            ;; be not supported.
-                           (ignore-errors (org-texinfo-compile input-file)))
+                           (ignore-errors (let ((inhibit-message t))
+                                            (org-texinfo-compile input-file))))
                           (output-content (with-temp-buffer
                                             (insert-file-contents output-file)
                                             (buffer-string))))

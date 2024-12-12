@@ -357,7 +357,7 @@ Shows a list of commands and prompts for another key to execute a command."
 	          (while (and (setq c (read-char-exclusive))
                               (memq c '(?\C-n ?\C-p ?\C-v ?\M-v)))
 	            (org-scroll c t)))
-              (when-let ((window (get-buffer-window "*Org Attach*" t)))
+              (when-let* ((window (get-buffer-window "*Org Attach*" t)))
                 (quit-window 'kill window))
 	      (and (get-buffer "*Org Attach*") (kill-buffer "*Org Attach*")))))
         (let ((command (cl-some (lambda (entry)
@@ -797,9 +797,18 @@ It is meant to be added to `org-export-before-parsing-hook'."
 See `org-open-file' for details about ARG."
   (org-link-open-as-file (org-attach-expand file) arg))
 
+(defun org-attach-preview-file (ov path link)
+  "Preview attachment with PATH in overlay OV.
+
+LINK is the Org link element being previewed."
+  (org-with-point-at (org-element-begin link)
+    (org-link-preview-file
+     ov (org-attach-expand path) link)))
+
 (org-link-set-parameters "attachment"
 			 :follow #'org-attach-follow
-                         :complete #'org-attach-complete-link)
+                         :complete #'org-attach-complete-link
+                         :preview #'org-attach-preview-file)
 
 (defun org-attach-complete-link ()
   "Advise the user with the available files in the attachment directory."

@@ -160,7 +160,7 @@
 ;; If one wants to search invisible text without using the provided
 ;; functions, it is important to keep in mind that 'invisible text
 ;; property may have multiple possible values (not just nil and
-;; t). Hence, (next-single-char-property-change pos 'invisible) is not
+;; t).  Hence, (next-single-char-property-change pos 'invisible) is not
 ;; guaranteed to return the boundary of invisible/visible text.
 
 ;;; Interactive searching inside folded text (via isearch)
@@ -172,7 +172,7 @@
 
 ;; The isearch behavior is controlled on per-folding-spec basis by
 ;; setting `isearch-open' and `isearch-ignore' folding spec
-;; properties.  The the docstring of `org-fold-core--specs' for more details.
+;; properties.  See the docstring of `org-fold-core--specs' for more details.
 
 ;;; Handling edits inside folded text
 
@@ -1070,8 +1070,9 @@ If SPEC-OR-ALIAS is omitted and FLAG is nil, unfold everything in the region."
                              (overlay-get ov 'invisible)
                              (org-fold-core-get-folding-spec-property
                               (overlay-get ov 'invisible) :isearch-open))
-                    (when (overlay-get ov 'invisible)
-                      (overlay-put ov 'org-invisible (overlay-get ov 'invisible)))
+                    (when-let* ((spec (overlay-get ov 'invisible)))
+                      (overlay-put ov 'org-invisible spec)
+                      (overlay-put ov (org-fold-core--property-symbol-get-create spec) nil))
                     (overlay-put ov 'invisible nil)
                     (when org-fold-core--isearch-active
                       (cl-pushnew ov org-fold-core--isearch-overlays)))))
@@ -1172,7 +1173,7 @@ because otherwise all these markers will point to nowhere."
 This is used to allow searching in regions hidden via text properties.
 As for [2020-05-09 Sat], Isearch only has special handling of hidden overlays.
 Any text hidden via text properties is not revealed even if `search-invisible'
-is set to `t'.")
+is set to t.")
 
 (defvar-local org-fold-core--isearch-local-regions (make-hash-table :test 'equal)
   "Hash table storing temporarily shown folds from isearch matches.")
@@ -1259,8 +1260,9 @@ REGION can also be an overlay in current buffer."
       (if hide-p
           (if (not (overlayp region))
               nil ;; FIXME: after isearch supports text properties.
-            (when (overlay-get region 'org-invisible)
-              (overlay-put region 'invisible (overlay-get region 'org-invisible))))
+            (when-let* ((spec (overlay-get region 'org-invisible)))
+              (overlay-put region 'invisible spec)
+              (overlay-put region (org-fold-core--property-symbol-get-create spec) spec)))
         ;; isearch expects all the temporarily opened overlays to exist.
         ;; See https://debbugs.gnu.org/cgi/bugreport.cgi?bug=60399
         (org-fold-core--keep-overlays

@@ -33,6 +33,7 @@
 
 (require 'cl-lib)
 (require 'format-spec)
+(eval-when-compile (require 'subr-x))  ; For `when-let*', Emacs < 29
 
 ;;; Org version verification.
 
@@ -573,7 +574,7 @@ is selected, only the bare key is returned."
 		   ((assoc current specials) (throw 'exit current))
 		   (t (error "No entry available")))))))
         (when buffer
-          (when-let ((window (get-buffer-window buffer t)))
+          (when-let* ((window (get-buffer-window buffer t)))
             (quit-window 'kill window))
           (kill-buffer buffer))))))
 
@@ -672,7 +673,14 @@ ones and overrule settings in the other lists."
     org-element--cache-diagnostics-ring-size
     org-element--cache-sync-keys
     org-element--cache-sync-requests
-    org-element--cache-sync-timer)
+    org-element--cache-sync-timer
+    ;; FIXME: Avoid copying `buffer-file-name' - when closing a
+    ;; temporary buffer, org-persist badly interacts with multiple
+    ;; _different_ buffers with the same `buffer-file-name' and may
+    ;; modify (via `org-element--cache-persist-before-write' by side
+    ;; effect the cache in a _different_ buffer (whatever comes first
+    ;; in `get-file-buffer').
+    buffer-file-name)
   "List of local variables that cannot be transferred to another buffer.")
 
 (defun org-get-local-variables ()
@@ -1218,7 +1226,7 @@ STRING width.  When REFERENCE-FACE is nil, `default' face is used."
               (setq symbol-width (org-buffer-text-pixel-width))))
           (if pixels
               pixel-width
-            (ceiling pixel-width symbol-width)))))))
+            (round pixel-width symbol-width)))))))
 
 (defmacro org-current-text-column ()
   "Like `current-column' but ignore display properties.
@@ -1228,7 +1236,7 @@ This function forces `tab-width' value because it is used as a part of
 the parser, to ensure parser consistency when calculating list
 indentation."
   `(progn
-     (unless (= 8 tab-width) (error "Tab width in Org files must be 8, not %d.  Please adjust your `tab-width' settings for Org mode." tab-width))
+     (unless (= 8 tab-width) (error "Tab width in Org files must be 8, not %d.  Please adjust your `tab-width' settings for Org mode" tab-width))
      (string-width (buffer-substring-no-properties
                     (line-beginning-position) (point)))))
 

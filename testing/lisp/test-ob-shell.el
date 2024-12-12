@@ -51,7 +51,7 @@ the body of the tangled block does."
 (ert-deftest test-ob-shell/dont-error-on-babel-error ()
   "Errors within Babel execution should not cause Lisp errors."
   (if (should (null (org-babel-execute:sh "ls NoSuchFileOrDirectory.txt" nil)))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 (ert-deftest test-ob-shell/session-single-return-returns-string ()
   "Sessions with a single result should return a string."
@@ -232,7 +232,7 @@ Bash will see a table that contains the first column as the
 value. "
   (skip-unless
    ;; Old GPLv2 BASH in macOSX does not support associative arrays.
-   (if-let ((bash (executable-find "bash")))
+   (if-let* ((bash (executable-find "bash")))
        (eq 0 (process-file bash nil nil nil "-c" "declare -A assoc_array"))))
   (org-test-with-temp-text
       "#+NAME: sample_mapping_table
@@ -255,7 +255,7 @@ Bash will see an associative array that contains each row as a single
 string. Bash cannot handle lists in associative arrays."
   (skip-unless
    ;; Old GPLv2 BASH in macOSX does not support associative arrays.
-   (if-let ((bash (executable-find "bash")))
+   (if-let* ((bash (executable-find "bash")))
        (eq 0 (process-file bash nil nil nil "-c" "declare -A assoc_array"))))
   (org-test-with-temp-text
       "#+NAME: sample_big_table
@@ -356,7 +356,7 @@ echo ${table[spaghetti]}
               (params-line "")
               (who-line "  export who=tramp")
               (args-line "  echo ARGS: --verbose 23 71"))
-          (when-let ((dir (plist-get spec :dir)))
+          (when-let* ((dir (plist-get spec :dir)))
             (setq params-line (concat params-line " " ":dir " dir)))
           (when (plist-get spec :stdin)
             (setq who-line "  read -r who")
@@ -429,7 +429,7 @@ echo 3
       (should (= 1
                  (org-babel-execute:sh
                   "echo 1; exit 2" nil)))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 
 ;;; Standard error
@@ -446,7 +446,7 @@ the exit code, after exiting with a zero code."
                         "echo 1 >&2" nil)
                        (with-current-buffer org-babel-error-buffer-name
                          (buffer-string)))))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 (ert-deftest test-ob-shell/error-output-after-failure ()
   "Test that standard error shows in the error buffer, alongside
@@ -460,7 +460,7 @@ the exit code, after exiting with a non-zero code."
                         "echo 1 >&2; exit 2" nil)
                        (with-current-buffer org-babel-error-buffer-name
                          (buffer-string)))))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 (ert-deftest test-ob-shell/error-output-after-failure-multiple ()
   "Test that multiple standard error strings show in the error
@@ -478,7 +478,7 @@ buffer, alongside multiple exit codes."
                         "echo 3 >&2; exit 4" nil)
                        (with-current-buffer org-babel-error-buffer-name
                          (buffer-string)))))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 
 ;;; Exit codes
@@ -494,7 +494,7 @@ with a non-zero return code."
                         "exit 1" nil)
                        (with-current-buffer org-babel-error-buffer-name
                          (buffer-string)))))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 (ert-deftest test-ob-shell/exit-code-multiple ()
   "Test that multiple exit codes show in the error buffer after
@@ -510,7 +510,7 @@ exiting with a non-zero return code multiple times."
                         "exit 2" nil)
                        (with-current-buffer org-babel-error-buffer-name
                          (buffer-string)))))
-      (kill-buffer "*Org-Babel Error Output*")))
+      (kill-buffer org-babel-error-buffer-name)))
 
 (provide 'test-ob-shell)
 

@@ -4,7 +4,7 @@
 ;; Copyright (C) 2004-2024 Free Software Foundation, Inc.
 ;;
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
-;; Maintainer: Bastien Guerry <bzg@gnu.org>
+;; Maintainer: Ihor Radchenko <yantar92@posteo.net>
 ;; Keywords: outlines, hypermedia, calendar, text
 ;; URL: https://orgmode.org
 ;; Package-Requires: ((emacs "26.1"))
@@ -1162,14 +1162,22 @@ the following lines anywhere in the buffer:
   :package-version '(Org . "9.2")
   :safe #'booleanp)
 
-(defcustom org-startup-with-inline-images nil
+(defvaralias 'org-startup-with-inline-images
+  'org-startup-with-link-previews
   "Non-nil means show inline images when loading a new Org file.
 This can also be configured on a per-file basis by adding one of
 the following lines anywhere in the buffer:
    #+STARTUP: inlineimages
-   #+STARTUP: noinlineimages"
+   #+STARTUP: noinlineimages")
+
+(defcustom org-startup-with-link-previews nil
+  "Non-nil means show link previews when loading a new Org file.
+This can also be configured on a per-file basis by adding one of
+the following lines anywhere in the buffer:
+   #+STARTUP: linkpreviews
+   #+STARTUP: nolinkpreviews"
   :group 'org-startup
-  :version "24.1"
+  :version "29.4"
   :type 'boolean)
 
 (defcustom org-startup-with-latex-preview nil
@@ -2672,7 +2680,7 @@ is non-nil."
 
 (defcustom org-read-date-popup-calendar t
   "Non-nil means pop up a calendar when prompting for a date.
-In the calendar, the date can be selected with mouse-1.  However, the
+In the calendar, the date can be selected with \\`mouse-1'.  However, the
 minibuffer will also be active, and you can simply enter the date as well.
 When nil, only the minibuffer will be available."
   :group 'org-time
@@ -3798,7 +3806,7 @@ You need to reload Org or to restart Emacs after setting this.")
   "Alist of characters and faces to emphasize text.
 Text starting and ending with a special character will be emphasized,
 for example *bold*, _underlined_ and /italic/.  This variable sets the
-the face to be used by font-lock for highlighting in Org buffers.
+face to be used by font-lock for highlighting in Org buffers.
 Marker characters must be one of */_=~+.
 
 You need to reload Org or to restart Emacs after customizing this."
@@ -4155,8 +4163,10 @@ After a match, the following groups carry important information:
     ("shrink" org-startup-shrink-all-tables t)
     ("descriptivelinks" org-link-descriptive t)
     ("literallinks" org-link-descriptive nil)
-    ("inlineimages" org-startup-with-inline-images t)
-    ("noinlineimages" org-startup-with-inline-images nil)
+    ("inlineimages" org-startup-with-link-previews t)
+    ("noinlineimages" org-startup-with-link-previews nil)
+    ("linkpreviews" org-startup-with-link-previews t)
+    ("nolinkpreviews" org-startup-with-link-previews nil)
     ("latexpreview" org-startup-with-latex-preview t)
     ("nolatexpreview" org-startup-with-latex-preview nil)
     ("customtime" org-display-custom-times t)
@@ -4858,7 +4868,7 @@ Respect keys that are already there."
 (defvar org-selected-window nil
   "Used in various places to store a window configuration.")
 (defvar org-finish-function nil
-  "Function to be called when `C-c C-c' is used.
+  "Function to be called when \\`C-c C-c' is used.
 This is for getting out of special buffers like capture.")
 (defvar org-last-state)
 
@@ -5081,7 +5091,7 @@ The following commands are available:
     ;; modifications to make cache updates work reliably.
     (org-unmodified
      (when org-startup-with-beamer-mode (org-beamer-mode))
-     (when org-startup-with-inline-images (org-display-inline-images))
+     (when org-startup-with-inline-images (org-link-preview '(16)))
      (when org-startup-with-latex-preview (org-latex-preview '(16)))
      (unless org-inhibit-startup-visibility-stuff (org-cycle-set-startup-visibility))
      (when org-startup-truncated (setq truncate-lines t))
@@ -5492,14 +5502,14 @@ by a #."
 	    (org-remove-flyspell-overlays-in nl-before-endline end-of-endline)
             (cond
 	     ((and org-src-fontify-natively
-                   ;; Technically, according to
+                   ;; Technically, according to the
                    ;; `org-src-fontify-natively' docstring, we should
                    ;; only fontify src blocks.  However, it is common
-                   ;; to use undocumented fontification of example
-                   ;; blocks with undocumented language specifier.
-                   ;; Keep this undocumented feature for user
-                   ;; convenience.
-                   (member block-type '("src" "example")))
+                   ;; to use undocumented fontification of export and
+                   ;; example blocks. (The latter which do not support a
+                   ;; language specifier.) Keep this undocumented feature
+                   ;; for user convenience.
+                   (member block-type '("src" "export" "example")))
 	      (save-match-data
                 (org-src-font-lock-fontify-block (or lang "") block-start block-end))
 	      (add-text-properties bol-after-beginline block-end '(src-block t)))
@@ -6701,7 +6711,7 @@ The prefix argument ARG is passed to `org-insert-heading'.
 Unlike `org-insert-heading', when point is at the beginning of a
 heading, still insert the new sub-heading below."
   (interactive "P")
-  (when (bolp) (forward-char))
+  (when (and (bolp) (not (eobp)) (not (eolp))) (forward-char))
   (org-insert-heading arg)
   (cond
    ((org-at-heading-p) (org-do-demote))
@@ -8272,7 +8282,23 @@ See the docstring of `org-open-file' for details."
   (mouse-set-point ev)
   (when (eq major-mode 'org-agenda-mode)
     (org-agenda-copy-local-variable 'org-link-abbrev-alist-local))
-  (org-open-at-point))
+  ;; FIXME: This feature is actually unreliable - if we are in non-Org
+  ;; buffer and the link happens to be inside what Org parser
+  ;; recognizes as verbarim (for exampe, src block),
+  ;; `org-open-at-point' will do nothing.
+  ;; We might have used `org-open-at-point-global' instead, but it is
+  ;; not exactly the same. For example, it will have no way to open
+  ;; link abbreviations. So, suppressing parser complains about
+  ;; non-Org buffer to keep the feature working at least to the extent
+  ;; it did before.
+  (require 'warnings) ; Emacs <30
+  (defvar warning-suppress-types) ; warnings.el
+  (let ((warning-suppress-types
+         (cons '(org-element org-element-parser)
+               warning-suppress-types)))
+    ;; FIXME: Suppress warning in Emacs <30
+    ;; (ignore warning-suppress-types)
+    (org-open-at-point)))
 
 (defvar org-window-config-before-follow-link nil
   "The window configuration before following a link.
@@ -9105,6 +9131,8 @@ keywords relative to each registered export backend."
 	     (delq nil keywords))
       ;; Backend name (for keywords, like #+LATEX:)
       (push (upcase (symbol-name (org-export-backend-name backend))) keywords)
+      ;; Backend attributes, like #+ATTR_LATEX:
+      (push (format "ATTR_%s" (upcase (symbol-name (org-export-backend-name backend)))) keywords)
       (dolist (option-entry (org-export-backend-options backend))
 	;; Backend options.
 	(push (nth 1 option-entry) keywords)))))
@@ -9376,21 +9404,23 @@ nil or a string to be used for the todo mark." )
 (defvar org-block-entry-blocking ""
   "First entry preventing the TODO state change.")
 
-(defun org-cancel-repeater ()
-  "Cancel a repeater by setting its numeric value to zero."
+(defalias 'org-cancel-repeater #'org-cancel-repeaters)
+(defun org-cancel-repeaters ()
+  "Cancel all the repeaters in entry by setting their numeric value to zero."
   (interactive)
   (save-excursion
     (org-back-to-heading t)
     (let ((bound1 (point))
 	  (bound0 (save-excursion (outline-next-heading) (point))))
-      (when (and (re-search-forward
-		  (concat "\\(" org-scheduled-time-regexp "\\)\\|\\("
-			  org-deadline-time-regexp "\\)\\|\\("
-			  org-ts-regexp "\\)")
-		  bound0 t)
-		 (re-search-backward "[ \t]+\\(?:[.+]\\)?\\+\\([0-9]+\\)[hdwmy]"
-				     bound1 t))
-	(replace-match "0" t nil nil 1)))))
+      (while (re-search-forward
+	      (concat "\\(" org-scheduled-time-regexp "\\)\\|\\("
+		      org-deadline-time-regexp "\\)\\|\\("
+		      org-ts-regexp "\\)")
+	      bound0 t)
+        (when (save-excursion
+	        (re-search-backward "[ \t]+\\(?:[.+]\\)?\\+\\([0-9]+\\)[hdwmy]"
+			            bound1 t))
+	  (replace-match "0" t nil nil 1))))))
 
 (defvar org-state)
 ;; FIXME: We should refactor this and similar dynamically scoped blocker flags.
@@ -9443,7 +9473,7 @@ When called through ELisp, arg is also interpreted in the following way:
 	 nil cl
 	 (when (org-invisible-p) (org-end-of-subtree nil t))))
     (when (equal arg '(16)) (setq arg 'nextset))
-    (when (equal (prefix-numeric-value arg) -1) (org-cancel-repeater) (setq arg nil))
+    (when (equal (prefix-numeric-value arg) -1) (org-cancel-repeaters) (setq arg nil))
     (when (< (prefix-numeric-value arg) -1) (user-error "Prefix argument %d not supported" arg))
     (let ((org-blocker-hook org-blocker-hook)
 	  commentp
@@ -11011,7 +11041,7 @@ containing the regular expression and the callback, onto the list.
 The list can contain several entries if `org-occur' has been called
 several time with the KEEP-PREVIOUS argument.  Otherwise, this list
 will only contain one set of parameters.  When the highlights are
-removed (for example with `C-c C-c', or with the next edit (depending
+removed (for example with \\`C-c C-c', or with the next edit (depending
 on `org-remove-highlights-with-change'), this variable is emptied
 as well.")
 
@@ -13222,8 +13252,8 @@ However, if LITERAL-NIL is set, return the string value \"nil\" instead."
     ;; Consider global properties, if we found no PROPERTY (or maybe
     ;; only PROPERTY+).
     (unless found-inherited?
-      (when-let ((global (org--property-global-or-keyword-value
-                          property t)))
+      (when-let* ((global (org--property-global-or-keyword-value
+                           property t)))
         (setq values (cons global values))))
     (when values
       (setq values (mapconcat
@@ -15583,26 +15613,6 @@ This requires Emacs >= 24.1, built with imagemagick support."
 	  (list :tag "Use #+ATTR* or a number of pixels" (integer))
 	  (const :tag "Use #+ATTR* or don't resize" nil)))
 
-(defcustom org-image-max-width 'fill-column
-  "When non-nil, limit the displayed image width.
-This setting only takes effect when `org-image-actual-width' is set to
-t or when #+ATTR* is set to t.
-
-Possible values:
-- `fill-column' :: limit width to `fill-column'
-- `window'      :: limit width to window width
-- integer       :: limit width to number in pixels
-- float         :: limit width to that fraction of window width
-- nil             :: do not limit image width"
-  :group 'org-appearance
-  :package-version '(Org . "9.7")
-  :type '(choice
-          (const :tag "Do not limit image width" nil)
-          (const :tag "Limit to `fill-column'" fill-column)
-          (const :tag "Limit to window width" window)
-          (integer :tag "Limit to a number of pixels")
-          (float :tag "Limit to a fraction of window width")))
-
 (defcustom org-agenda-inhibit-startup nil
   "Inhibit startup when preparing agenda buffers.
 When this variable is t, the initialization of the Org agenda
@@ -16734,420 +16744,6 @@ should be consistent with the name of the symbol returned by
     (* (or scale 1.0)
        (if image-dpi (/ display-dpi image-dpi) 1.0))))
 
-(defun org--inline-image-overlays (&optional beg end)
-  "Return image overlays between BEG and END."
-  (let* ((beg (or beg (point-min)))
-         (end (or end (point-max)))
-         (overlays (overlays-in beg end))
-         result)
-    (dolist (ov overlays result)
-      (when (memq ov org-inline-image-overlays)
-        (push ov result)))))
-
-(defun org-toggle-inline-images (&optional include-linked beg end)
-  "Toggle the display of inline images.
-INCLUDE-LINKED is passed to `org-display-inline-images'."
-  (interactive "P")
-  (if (org--inline-image-overlays beg end)
-      (progn
-        (org-remove-inline-images beg end)
-        (when (called-interactively-p 'interactive)
-	  (message "Inline image display turned off")))
-    (org-display-inline-images include-linked nil beg end)
-    (when (called-interactively-p 'interactive)
-      (let ((new (org--inline-image-overlays beg end)))
-        (message (if new
-		     (format "%d images displayed inline"
-			     (length new))
-		   "No images to display inline"))))))
-
-(defun org-redisplay-inline-images ()
-  "Assure display of inline images and refresh them."
-  (interactive)
-  (org-toggle-inline-images)
-  (unless org-inline-image-overlays
-    (org-toggle-inline-images)))
-
-;; For without-x builds.
-(declare-function image-flush "image" (spec &optional frame))
-
-(defcustom org-display-remote-inline-images 'skip
-  "How to display remote inline images.
-Possible values of this option are:
-
-skip        Don't display remote images.
-download    Always download and display remote images.
-t
-cache       Display remote images, and open them in separate buffers
-            for caching.  Silently update the image buffer when a file
-            change is detected."
-  :group 'org-appearance
-  :package-version '(Org . "9.7")
-  :type '(choice
-	  (const :tag "Ignore remote images" skip)
-	  (const :tag "Always display remote images" download)
-	  (const :tag "Display and silently update remote images" cache))
-  :safe #'symbolp)
-
-(defcustom org-image-align 'left
-  "How to align images previewed using `org-display-inline-images'.
-
-Only stand-alone image links are affected by this setting.  These
-are links without surrounding text.
-
-Possible values of this option are:
-
-left     Insert image at specified position.
-center   Center image previews.
-right    Right-align image previews."
-  :group 'org-appearance
-  :package-version '(Org . "9.7")
-  :type '(choice
-          (const :tag "Left align (or don\\='t align) image previews" left)
-	  (const :tag "Center image previews" center)
-	  (const :tag "Right align image previews" right))
-  :safe #'symbolp)
-
-(defun org--create-inline-image (file width &optional scale)
-  "Create image located at FILE, or return nil.
-WIDTH is the width of the image.  The image may not be created
-according to the value of `org-display-remote-inline-images'."
-  (let* ((remote? (file-remote-p file))
-	 (file-or-data
-	  (pcase org-display-remote-inline-images
-	    ((guard (not remote?)) file)
-	    (`download (with-temp-buffer
-			 (set-buffer-multibyte nil)
-			 (insert-file-contents-literally file)
-			 (buffer-string)))
-	    ((or `cache `t)
-             (let ((revert-without-query '(".")))
-	       (with-current-buffer (find-file-noselect file)
-		 (buffer-string))))
-	    (`skip nil)
-	    (other
-	     (message "Invalid value of `org-display-remote-inline-images': %S"
-		      other)
-	     nil)))
-	 (scale (org--get-image-scale file-or-data remote? scale)))
-    (when file-or-data
-      (create-image file-or-data
-		    (and (image-type-available-p 'imagemagick)
-			 width
-			 'imagemagick)
-		    remote?
-		    :width width
-                    :max-width
-                    (pcase org-image-max-width
-                      (`fill-column (* fill-column (frame-char-width (selected-frame))))
-                      (`window (window-width nil t))
-                      ((pred integerp) org-image-max-width)
-                      ((pred floatp) (floor (* org-image-max-width (window-width nil t))))
-                      (`nil nil)
-                      (_ (error "Unsupported value of `org-image-max-width': %S"
-                                org-image-max-width)))
-                    :scale scale))))
-
-(defun org-display-inline-images (&optional include-linked refresh beg end)
-  "Display inline images.
-
-An inline image is a link which follows either of these
-conventions:
-
-  1. Its path is a file with an extension matching return value
-     from `image-file-name-regexp' and it has no contents.
-
-  2. Its description consists in a single link of the previous
-     type.  In this case, that link must be a well-formed plain
-     or angle link, i.e., it must have an explicit \"file\" or
-     \"attachment\" type.
-
-Equip each image with the key-map `image-map'.
-
-When optional argument INCLUDE-LINKED is non-nil, also links with
-a text description part will be inlined.  This can be nice for
-a quick look at those images, but it does not reflect what
-exported files will look like.
-
-When optional argument REFRESH is non-nil, refresh existing
-images between BEG and END.  This will create new image displays
-only if necessary.
-
-BEG and END define the considered part.  They default to the
-buffer boundaries with possible narrowing."
-  (interactive "P")
-  (when (display-graphic-p)
-    (when refresh
-      (org-remove-inline-images beg end)
-      (when (fboundp 'clear-image-cache) (clear-image-cache)))
-    (let ((end (or end (point-max))))
-      (org-with-point-at (or beg (point-min))
-	(let* ((case-fold-search t)
-	       (file-extension-re (image-file-name-regexp))
-	       (link-abbrevs (mapcar #'car
-				     (append org-link-abbrev-alist-local
-					     org-link-abbrev-alist)))
-	       ;; Check absolute, relative file names and explicit
-	       ;; "file:" links.  Also check link abbreviations since
-	       ;; some might expand to "file" links.
-	       (file-types-re
-		(format "\\[\\[\\(?:file%s:\\|attachment:\\|[./~]\\)\\|\\]\\[\\(<?\\(?:file\\|attachment\\):\\)"
-			(if (not link-abbrevs) ""
-			  (concat "\\|" (regexp-opt link-abbrevs))))))
-	  (while (re-search-forward file-types-re end t)
-	    (let* ((link (org-element-lineage
-			  (save-match-data (org-element-context))
-			  'link t))
-                   (linktype (org-element-property :type link))
-		   (inner-start (match-beginning 1))
-		   (path
-		    (cond
-		     ;; No link at point; no inline image.
-		     ((not link) nil)
-		     ;; File link without a description.  Also handle
-		     ;; INCLUDE-LINKED here since it should have
-		     ;; precedence over the next case.  I.e., if link
-		     ;; contains filenames in both the path and the
-		     ;; description, prioritize the path only when
-		     ;; INCLUDE-LINKED is non-nil.
-		     ((or (not (org-element-contents-begin link))
-			  include-linked)
-		      (and (or (equal "file" linktype)
-                               (equal "attachment" linktype))
-			   (org-element-property :path link)))
-		     ;; Link with a description.  Check if description
-		     ;; is a filename.  Even if Org doesn't have syntax
-		     ;; for those -- clickable image -- constructs, fake
-		     ;; them, as in `org-export-insert-image-links'.
-		     ((not inner-start) nil)
-		     (t
-		      (org-with-point-at inner-start
-			(and (looking-at
-			      (if (char-equal ?< (char-after inner-start))
-				  org-link-angle-re
-				org-link-plain-re))
-			     ;; File name must fill the whole
-			     ;; description.
-			     (= (org-element-contents-end link)
-				(match-end 0))
-			     (progn
-                               (setq linktype (match-string 1))
-                               (match-string 2))))))))
-	      (when (and path (string-match-p file-extension-re path))
-		(let ((file (if (equal "attachment" linktype)
-				(progn
-                                  (require 'org-attach)
-				  (ignore-errors (org-attach-expand path)))
-                              (expand-file-name path))))
-                  ;; Expand environment variables.
-                  (when file (setq file (substitute-in-file-name file)))
-		  (when (and file (file-exists-p file))
-		    (let ((width (org-display-inline-image--width link))
-			  (align (org-image--align link))
-                          (old (get-char-property-and-overlay
-				(org-element-begin link)
-				'org-image-overlay)))
-		      (if (and (car-safe old) refresh)
-                          (image-flush (overlay-get (cdr old) 'display))
-			(let ((image (org--create-inline-image file width)))
-			  (when image
-			    (let ((ov (make-overlay
-				       (org-element-begin link)
-				       (progn
-					 (goto-char
-					  (org-element-end link))
-					 (unless (eolp) (skip-chars-backward " \t"))
-					 (point)))))
-                              ;; See bug#59902.  We cannot rely
-                              ;; on Emacs to update image if the file
-                              ;; has changed.
-                              (image-flush image)
-			      (overlay-put ov 'display image)
-			      (overlay-put ov 'face 'default)
-			      (overlay-put ov 'org-image-overlay t)
-			      (overlay-put
-			       ov 'modification-hooks
-			       (list 'org-display-inline-remove-overlay))
-			      (when (boundp 'image-map)
-				(overlay-put ov 'keymap image-map))
-                              (when align
-                                (overlay-put
-                                 ov 'before-string
-                                 (propertize
-                                  " " 'face 'default
-                                  'display
-                                  (pcase align
-                                    ("center" `(space :align-to (- center (0.5 . ,image))))
-                                    ("right"  `(space :align-to (- right ,image)))))))
-			      (push ov org-inline-image-overlays))))))))))))))))
-
-(declare-function org-export-read-attribute "ox"
-                  (attribute element &optional property))
-(defvar visual-fill-column-width) ; Silence compiler warning
-(defun org-display-inline-image--width (link)
-  "Determine the display width of the image LINK, in pixels.
-- When `org-image-actual-width' is t, the image's pixel width is used.
-- When `org-image-actual-width' is a number, that value will is used.
-- When `org-image-actual-width' is nil or a list, :width attribute of
-  #+attr_org or the first #+attr_...  (if it exists) is used to set the
-  image width.  A width of X% is divided by 100.  If the value is a
-  float between 0 and 2, it interpreted as that proportion of the text
-  width in the buffer.
-
-  If no :width attribute is given and `org-image-actual-width' is a
-  list with a number as the car, then that number is used as the
-  default value."
-  ;; Apply `org-image-actual-width' specifications.
-  ;; Support subtree-level property "ORG-IMAGE-ACTUAL-WIDTH" specified
-  ;; width.
-  (let ((org-image-actual-width (org-property-or-variable-value 'org-image-actual-width)))
-    (cond
-     ((eq org-image-actual-width t) nil)
-     ((listp org-image-actual-width)
-      (require 'ox)
-      (let* ((par (org-element-lineage link 'paragraph))
-             ;; Try to find an attribute providing a :width.
-             ;; #+ATTR_ORG: :width ...
-             (attr-width (org-export-read-attribute :attr_org par :width))
-             (width-unreadable?
-              (lambda (value)
-                (or (not (stringp value))
-                    (unless (string= value "t")
-                      (or (not (string-match-p
-                              (rx bos (opt "+") (opt ".") (in "0-9"))
-                              value))
-                          (let ((number (string-to-number value)))
-                            (and (floatp number) (not (<= 0.0 number 2.0)))))))))
-             ;; #+ATTR_BACKEND: :width ...
-             (attr-other
-              (catch :found
-                (org-element-properties-map
-                 (lambda (prop _)
-                   (when (and
-                          (not (eq prop :attr_org))
-                          (string-match-p "^:attr_" (symbol-name prop))
-                          (not (funcall width-unreadable? (org-export-read-attribute prop par :width))))
-                     (throw :found prop)))
-                 par)))
-             (attr-width
-              (if (not (funcall width-unreadable? attr-width))
-                  attr-width
-                ;; When #+attr_org: does not have readable :width
-                (and attr-other
-                     (org-export-read-attribute attr-other par :width))))
-             (width
-              (cond
-               ;; Treat :width t as if `org-image-actual-width' were t.
-               ((string= attr-width "t") nil)
-               ;; Fallback to `org-image-actual-width' if no interprable width is given.
-               ((funcall width-unreadable? attr-width)
-                (car org-image-actual-width))
-               ;; Convert numeric widths to numbers, converting percentages.
-               ((string-match-p "\\`[[+]?[0-9.]+%" attr-width)
-                (/ (string-to-number attr-width) 100.0))
-               (t (string-to-number attr-width)))))
-        (if (and (floatp width) (<= 0.0 width 2.0))
-            ;; A float in [0,2] should be interpereted as this portion of
-            ;; the text width in the window.  This works well with cases like
-            ;; #+attr_latex: :width 0.X\{line,page,column,etc.}width,
-            ;; as the "0.X" is pulled out as a float.  We use 2 as the upper
-            ;; bound as cases such as 1.2\linewidth are feasible.
-            (round (* width
-                      (window-pixel-width)
-                      (/ (or (and (bound-and-true-p visual-fill-column-mode)
-                                  (or visual-fill-column-width auto-fill-function))
-                             (when auto-fill-function fill-column)
-                             (- (window-text-width) (line-number-display-width)))
-                         (float (window-total-width)))))
-          width)))
-     ((numberp org-image-actual-width)
-      org-image-actual-width)
-     (t nil))))
-
-(defun org-image--align (link)
-  "Determine the alignment of the image LINK.
-LINK is a link object.
-
-In decreasing order of priority, this is controlled:
-- Per image by the value of `:center' or `:align' in the
-affiliated keyword `#+attr_org'.
-- By the `#+attr_html' or `#+attr_latex` keywords with valid
-  `:center' or `:align' values.
-- Globally by the user option `org-image-align'.
-
-The result is either nil or one of the strings \"left\",
-\"center\" or \"right\".
-
-\"center\" will cause the image preview to be centered, \"right\"
-will cause it to be right-aligned.  A value of \"left\" or nil
-implies no special alignment."
-  (let ((par (org-element-lineage link 'paragraph)))
-    ;; Only align when image is not surrounded by paragraph text:
-    (when (and par ; when image is not in paragraph, but in table/headline/etc, do not align
-               (= (org-element-begin link)
-                  (save-excursion
-                    (goto-char (org-element-contents-begin par))
-                    (skip-chars-forward "\t ")
-                    (point)))           ;account for leading space
-                                        ;before link
-               (<= (- (org-element-contents-end par)
-                     (org-element-end link))
-                  1))                  ;account for trailing newline
-                                        ;at end of paragraph
-      (save-match-data
-        ;; Look for a valid ":center t" or ":align left|center|right"
-        ;; attribute.
-        ;;
-        ;; An attr_org keyword has the highest priority, with
-        ;; any attr.* next.  Choosing between these is
-        ;; unspecified.
-        (let ((center-re ":\\(center\\)[[:space:]]+t\\b")
-              (align-re ":align[[:space:]]+\\(left\\|center\\|right\\)\\b")
-              attr-align)
-          (catch 'exit
-            (org-element-properties-mapc
-             (lambda (propname propval)
-               (when (and propval
-                          (string-match-p ":attr.*" (symbol-name propname)))
-                 (setq propval (car-safe propval))
-                 (when (or (string-match center-re propval)
-                           (string-match align-re propval))
-                   (setq attr-align (match-string 1 propval))
-                   (when (eq propname :attr_org)
-                     (throw 'exit t)))))
-             par))
-          (if attr-align
-              (when (member attr-align '("center" "right")) attr-align)
-            ;; No image-specific keyword, check global alignment property
-            (when (memq org-image-align '(center right))
-              (symbol-name org-image-align))))))))
-
-
-(defun org-display-inline-remove-overlay (ov after _beg _end &optional _len)
-  "Remove inline-display overlay if a corresponding region is modified."
-  (when (and ov after)
-    (setq org-inline-image-overlays (delete ov org-inline-image-overlays))
-    ;; Clear image from cache to avoid image not updating upon
-    ;; changing on disk.  See Emacs bug#59902.
-    (when (overlay-get ov 'org-image-overlay)
-      (image-flush (overlay-get ov 'display)))
-    (delete-overlay ov)))
-
-(defun org-remove-inline-images (&optional beg end)
-  "Remove inline display of images."
-  (interactive)
-  (let* ((beg (or beg (point-min)))
-         (end (or end (point-max)))
-         (overlays (overlays-in beg end)))
-    (dolist (ov overlays)
-      (when (memq ov org-inline-image-overlays)
-        (setq org-inline-image-overlays (delq ov org-inline-image-overlays))
-        (delete-overlay ov)))
-    ;; Clear removed overlays.
-    (dolist (ov org-inline-image-overlays)
-      (unless (overlay-buffer ov)
-        (setq org-inline-image-overlays (delq ov org-inline-image-overlays))))))
-
 (defvar org-self-insert-command-undo-counter 0)
 (defvar org-speed-command nil)
 
@@ -17170,7 +16766,7 @@ Set `org-speed-command' to the appropriate command as a side effect."
 		(make-string 1 (aref kv (1- (length kv)))))))))
 
 (defun org-self-insert-command (N)
-  "Like `self-insert-command', use overwrite-mode for whitespace in tables.
+  "Like `self-insert-command', use `overwrite-mode' for whitespace in tables.
 If the cursor is in a table looking at whitespace, the whitespace is
 overwritten, and the table is not marked as requiring realignment."
   (interactive "p")
@@ -17319,9 +16915,9 @@ word constituents."
     (call-interactively 'transpose-words)))
 
 (defvar org-ctrl-c-ctrl-c-hook nil
-  "Hook for functions attaching themselves to `C-c C-c'.
+  "Hook for functions attaching themselves to \\`C-c C-c'.
 
-This can be used to add additional functionality to the `C-c C-c'
+This can be used to add additional functionality to the \\`C-c C-c'
 key which executes context-dependent commands.  This hook is run
 before any other test, while `org-ctrl-c-ctrl-c-final-hook' is
 run after the last test.
@@ -17332,9 +16928,9 @@ it should do its thing and then return a non-nil value.  If the
 context is wrong, just do nothing and return nil.")
 
 (defvar org-ctrl-c-ctrl-c-final-hook nil
-  "Hook for functions attaching themselves to `C-c C-c'.
+  "Hook for functions attaching themselves to \\`C-c C-c'.
 
-This can be used to add additional functionality to the `C-c C-c'
+This can be used to add additional functionality to the \\`C-c C-c'
 key which executes context-dependent commands.  This hook is run
 after any other test, while `org-ctrl-c-ctrl-c-hook' is run
 before the first test.
@@ -19148,7 +18744,7 @@ appear in the form of file names, tags, todo states or search strings.
 If you answer \"yes\" to the prompt, you might want to check and remove
 such private information before sending the email.")
 	 (add-text-properties (point-min) (point-max) '(face org-warning))
-	 (when (yes-or-no-p "Include your Org configuration and Org warning log ")
+         (when (yes-or-no-p "Include your Org configuration and Org warning log?")
 	   (mapatoms
 	    (lambda (v)
 	      (and (boundp v)
@@ -19703,7 +19299,7 @@ ELEMENT."
 	      (if level (1+ level) 0))))
 	 ((item plain-list) (org-list-item-body-column post-affiliated))
 	 (t
-	  (goto-char start)
+	  (when start (goto-char start))
 	  (current-indentation))))
       ((memq type '(headline inlinetask nil))
        (if (org-match-line "[ \t]*$")
@@ -19712,14 +19308,14 @@ ELEMENT."
       ((memq type '(diary-sexp footnote-definition)) 0)
       ;; First paragraph of a footnote definition or an item.
       ;; Indent like parent.
-      ((< (line-beginning-position) start)
+      ((and start (< (line-beginning-position) start))
        (org--get-expected-indentation
 	(org-element-parent element) t))
       ;; At first line: indent according to previous sibling, if any,
       ;; ignoring footnote definitions and inline tasks, or parent's
       ;; contents.  If `org-adapt-indentation' is `headline-data', ignore
       ;; previous headline data siblings.
-      ((= (line-beginning-position) start)
+      ((and start (= (line-beginning-position) start))
        (catch 'exit
 	 (while t
 	   (if (= (point-min) start) (throw 'exit 0)
@@ -19769,13 +19365,13 @@ ELEMENT."
 	  ;; Line above is the first one of a paragraph at the
 	  ;; beginning of an item or a footnote definition.  Indent
 	  ;; like parent.
-	  ((< (line-beginning-position) start)
+	  ((and start (< (line-beginning-position) start))
 	   (org--get-expected-indentation
 	    (org-element-parent element) t))
 	  ;; Line above is the beginning of an element, i.e., point
 	  ;; was originally on the blank lines between element's start
 	  ;; and contents.
-	  ((= (line-beginning-position) post-affiliated)
+	  ((and post-affiliated (= (line-beginning-position) post-affiliated))
 	   (org--get-expected-indentation element t))
 	  ;; POS is after contents in a greater element.  Indent like
 	  ;; the beginning of the element.
@@ -19863,10 +19459,11 @@ Also align node properties according to `org-property-format'."
                      (not (org--at-headline-data-p nil element))
                      ;; Not at headline data and previous is headline data/headline.
                      (or (memq type '(headline inlinetask)) ; blank lines after heading
-                         (save-excursion
-                           (goto-char (1- (org-element-begin element)))
-                           (or (org-at-heading-p)
-                               (org--at-headline-data-p))))))
+                         (and element
+                              (save-excursion
+                                (goto-char (1- (org-element-begin element)))
+                                (or (org-at-heading-p)
+                                    (org--at-headline-data-p)))))))
       (cond ((and (memq type '(plain-list item))
 		  (= (line-beginning-position)
 		     (org-element-post-affiliated element)))
@@ -20639,11 +20236,15 @@ strictly within a source block, use appropriate comment syntax."
 		end)))
       ;; Translate region boundaries for the Org buffer to the source
       ;; buffer.
-      (let ((offset (- end beg)))
+      (let (src-end)
+        (save-excursion
+          (goto-char end)
+          (org-babel-do-in-edit-buffer
+           (setq src-end (point))))
 	(save-excursion
 	  (goto-char beg)
 	  (org-babel-do-in-edit-buffer
-	   (comment-or-uncomment-region (point) (+ offset (point))))))
+	   (comment-or-uncomment-region (point) src-end))))
     (save-restriction
       ;; Restrict region
       (narrow-to-region (save-excursion (goto-char beg)
@@ -20900,8 +20501,11 @@ end."
     (when (and (not (eq org-yank-image-save-method 'attach))
                (not (file-directory-p org-yank-image-save-method)))
       (make-directory org-yank-image-save-method t))
-    (with-temp-file absname
-      (insert data))
+    ;; DATA is a raw image.  Tell Emacs to write it raw, without
+    ;; trying to auto-detect the coding system.
+    (let ((coding-system-for-write 'emacs-internal))
+      (with-temp-file absname
+        (insert data)))
     (if (null (eq org-yank-image-save-method 'attach))
         (setq link (org-link-make-string (concat "file:" (file-relative-name absname))))
       (require 'org-attach)
@@ -21730,10 +21334,10 @@ When TO-HEADING is non-nil, go to the next heading or `point-max'."
   "Skip planning line and properties drawer in current entry.
 
 When optional argument FULL is t, also skip planning information,
-clocking lines and any kind of drawer.
+clocking lines, any kind of drawer, and blank lines
 
 When FULL is non-nil but not t, skip planning information,
-properties, clocking lines and logbook drawers."
+properties, clocking lines, logbook drawers, and blank lines."
   (org-back-to-heading t)
   (forward-line)
   ;; Skip planning information.
@@ -21748,7 +21352,7 @@ properties, clocking lines and logbook drawers."
       (let ((end (save-excursion (outline-next-heading) (point)))
 	    (re (concat "[ \t]*$" "\\|" org-clock-line-re)))
 	(while (not (eobp))
-	  (cond ;; Skip clock lines.
+	  (cond ;; Skip clock lines and blank lines.
 	   ((looking-at-p re) (forward-line))
 	   ;; Skip logbook drawer.
 	   ((looking-at-p org-logbook-drawer-re)
@@ -21890,7 +21494,7 @@ It also provides the following special moves for convenience:
     arg))
 
 (defvar org--single-lines-list-is-paragraph t
-  "Treat plain lists with single line items as a whole paragraph")
+  "Treat plain lists with single line items as a whole paragraph.")
 
 (defun org--paragraph-at-point ()
   "Return paragraph, or equivalent, element at point.

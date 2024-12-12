@@ -27,7 +27,7 @@ Authoring Org files is best supported by Emacs, but you can view,
 understand, and change them with any text editor.
 
 As an authoring tool, Org helps you write structured documents and
-provides exporting facilities. Org files can also be used for literate
+provides exporting facilities.  Org files can also be used for literate
 programming and reproducible research.  As a TODO lists manager, Org
 helps you organize your tasks in a flexible way, from daily needs to
 detailed project-planning, allowing logging, multiple views on your
@@ -604,11 +604,11 @@ Org uses just two commands, bound to {{{kbd(TAB)}}} and
   the very beginning of the buffer, but not on a headline, and
   ~org-cycle-global-at-bob~ is set to a non-~nil~ value.
 
-- {{{kbd(C-u C-u TAB)}}} (~org-set-startup-visibility~) ::
+- {{{kbd(C-u C-u TAB)}}} (~org-cycle-set-startup-visibility~) ::
 
   #+cindex: startup visibility
   #+kindex: C-u C-u TAB
-  #+findex: org-set-startup-visibility
+  #+findex: org-cycle-set-startup-visibility
   Switch back to the startup visibility of the buffer (see [[*Initial
   visibility]]).
 
@@ -695,10 +695,10 @@ Furthermore, any entries with a =VISIBILITY= property (see [[*Properties
 and Columns]]) get their visibility adapted accordingly.  Allowed values
 for this property are =folded=, =children=, =content=, and =all=.
 
-- {{{kbd(C-u C-u TAB)}}} (~org-set-startup-visibility~) ::
+- {{{kbd(C-u C-u TAB)}}} (~org-cycle-set-startup-visibility~) ::
 
   #+kindex: C-u C-u TAB
-  #+findex: org-set-startup-visibility
+  #+findex: org-cycle-set-startup-visibility
   Switch back to the startup visibility of the buffer, i.e., whatever
   is requested by startup options and =VISIBILITY= properties in
   individual entries.
@@ -3359,7 +3359,7 @@ Here is the full set of built-in link types:
 
 - =gnus=, =rmail=, =mhe= ::
 
-  Link to messages or folders from a given Emacs' MUA.
+  Link to messages or folders from a given Emacs MUA.
 
 - =help= ::
 
@@ -3799,8 +3799,8 @@ argument.
 
 With the above setting, you could link to a specific bug with
 =[[bugzilla:129]]=, search the web for =OrgMode= with =[[duckduckgo:OrgMode]]=,
-show the map location of the Free Software Foundation =[[gmap:51
-Franklin Street, Boston]]= or of Carsten office =[[omap:Science Park 904,
+show the map location of the Free Software Foundation =[[omap:31
+Milk Street, Boston]]= or of Carsten's office =[[omap:Science Park 904,
 Amsterdam, The Netherlands]]= and find out what the Org author is doing
 besides Emacs hacking with =[[ads:Dominik,C]]=.
 
@@ -4626,7 +4626,7 @@ When using numeric priorities, you need to set ~org-priority-highest~,
 ~org-priority-lowest~ and ~org-priority-default~ to integers, which
 must all be strictly inferior to 65.
 
-Priorities can be attached to any outline node; they do not need to be
+Priorities can be attached to any heading; they do not need to be
 TODO items.
 
 #+attr_texinfo: :sep ;
@@ -4785,7 +4785,7 @@ resolve this issue.
 #+cindex: blocking, of checkboxes
 #+cindex: checkbox blocking
 #+cindex: @samp{ORDERED}, property
-If the current outline node has an =ORDERED= property, checkboxes must
+If the current heading has an =ORDERED= property, checkboxes must
 be checked off in sequence, and an error is thrown if you try to check
 off a box while there are unchecked boxes above it.
 
@@ -5649,7 +5649,7 @@ least for the special applications for which they are used:
 :END:
 
 A great way to view and edit properties in an outline tree is /column
-view/.  In column view, each outline node is turned into a table row.
+view/.  In column view, each heading is turned into a table row.
 Columns in this table provide access to properties of the entries.
 Org mode implements columns by overlaying a tabular structure over the
 headline of each item.  While the headlines have been turned into
@@ -7853,11 +7853,10 @@ You may also define a global key for capturing new material (see
 
   #+findex: org-capture
   Display the capture templates menu.  If you have templates defined
-  (see [[*Capture templates]]), it offers these templates for selection or
-  use a new Org outline node as the default template.  It inserts the
-  template into the target file and switch to an indirect buffer
-  narrowed to this new node.  You may then insert the information you
-  want.
+  (see [[*Capture templates]]), it offers these templates for
+  selection.  It inserts the template into the target file and switch
+  to an indirect buffer narrowed to this new node.  You may then
+  insert the information you want.
 
 - {{{kbd(C-c C-c)}}} (~org-capture-finalize~) ::
 
@@ -8429,24 +8428,25 @@ See the docstring of the variable for more information.
 :END:
 #+cindex: attachments
 
-It is often useful to associate reference material with an outline
-node.  Small chunks of plain text can simply be stored in the subtree
-of a project.  Hyperlinks (see [[*Hyperlinks]]) can establish associations
-with files that live elsewhere on a local, or even remote, computer,
-like emails or source code files belonging to a project.
+It is often useful to associate reference material with a heading or
+subtree.  Small chunks of plain text can simply be stored in the
+subtree of a project.  Hyperlinks (see [[*Hyperlinks]]) can establish
+associations with files that live elsewhere on a local, or even
+remote, computer, like emails or source code files belonging to a
+project.
 
 Another method is /attachments/, which are files located in a
-directory belonging to an outline node.  Org uses directories either
-named by a unique ID of each entry, or by a =DIR= property.
+directory belonging to heading/subtree.  Org uses directories either
+named by =ID= property of a heading, or by a =DIR= property.
 
 *** Attachment defaults and dispatcher
 :PROPERTIES:
 :DESCRIPTION: How to access attachment commands
 :END:
 
-By default, Org attach uses ID properties when adding attachments to
-outline nodes.  This makes working with attachments fully automated.
-There is no decision needed for folder-name or location.  ID-based
+By default, Org attach uses =ID= properties when adding attachments to
+headings.  This makes working with attachments fully automated.  There
+is no decision needed for folder-name or location.  =ID=-based
 directories are by default located in the =data/= directory, which
 lives in the same directory where your Org file lives[fn:: If you move
 entries or Org files from one directory to another, you may want to
@@ -8560,7 +8560,7 @@ The following commands deal with attachments:
     property and asks the user to either move content inside that
     folder, if an =ID= property is set, delete the content, or to
     leave the attachment directory as is but no longer attached to the
-    outline node.
+    heading.
 
 *** Attachment options
 :PROPERTIES:
@@ -8583,13 +8583,13 @@ mentioning.
 
 - ~org-attach-use-inheritance~ ::
   #+vindex: org-attach-use-inheritance
-  By default folders attached to an outline node are inherited from
-  parents according to ~org-use-property-inheritance~.  If one instead
-  want to set inheritance specifically for Org attach that can be done
-  using ~org-attach-use-inheritance~.  Inheriting documents through
-  the node hierarchy makes a lot of sense in most cases.  Especially
-  when using attachment links (see [[*Attachment links]]).  The following
-  example shows one use case for attachment inheritance:
+  By default folders attached to a heading are inherited from parents
+  according to ~org-use-property-inheritance~.  If one instead want to
+  set inheritance specifically for Org attach that can be done using
+  ~org-attach-use-inheritance~.  Inheriting documents through the node
+  hierarchy makes a lot of sense in most cases.  Especially when using
+  attachment links (see [[*Attachment links]]).  The following example
+  shows one use case for attachment inheritance:
 
   #+begin_example
   ,* Chapter A ...
@@ -8673,8 +8673,8 @@ default settings.
 :END:
 
 Attached files and folders can be referenced using attachment links.
-This makes it easy to refer to the material added to an outline node.
-Especially if it was attached using the unique ID of the entry!
+This makes it easy to refer to the material added to heading/subtree.
+Especially if it was attached using the unique =ID= of the heading!
 
 #+begin_example
 ,* TODO Some task
@@ -8691,7 +8691,7 @@ See [[*External Links]] for more information about these links.
 :DESCRIPTION: Everything safely stored away
 :END:
 
-If the directory attached to an outline node is a Git repository, Org
+If the directory attached to a heading is a Git repository, Org
 can be configured to automatically commit changes to that repository
 when it sees them.
 
@@ -10237,11 +10237,11 @@ the other commands, point needs to be in the desired line.
   #+vindex: org-agenda-start-with-entry-text-mode
   #+vindex: org-agenda-entry-text-maxlines
   Toggle entry text mode.  In entry text mode, a number of lines from
-  the Org outline node referenced by an agenda line are displayed
-  below the line.  The maximum number of lines is given by the
-  variable ~org-agenda-entry-text-maxlines~.  Calling this command
-  with a numeric prefix argument temporarily modifies that number to
-  the prefix value.
+  the Org heading referenced by an agenda line are displayed below the
+  line.  The maximum number of lines is given by the variable
+  ~org-agenda-entry-text-maxlines~.  Calling this command with a
+  numeric prefix argument temporarily modifies that number to the
+  prefix value.
 
 - {{{kbd(G)}}} (~org-agenda-toggle-time-grid~) ::
 
@@ -11778,7 +11778,77 @@ buffer, and insert it with the proper formatting like =(ref:label)= at
 the end of the current line.  Then the label is stored as a link
 =(label)=, for retrieval with {{{kbd(C-c C-l)}}}.
 
-** Images
+** Images and link previews
+:PROPERTIES:
+:DESCRIPTION: Preview links in the buffer
+:END:
+
+Org mode can display previews of hyperlinks (see [[*Hyperlinks]])
+inside Org buffers.  By default, only image links[fn::Image links are
+=file:= and =attachment:= links to existing image files; Emacs can
+only display the linked images listed in ~image-types~ variable] can
+be previewed inline, where the images are displayed in place of the
+link path.
+
+You can customize the previews as described in [[*Adding Hyperlink
+preview]].  Link previews do not have to display images -- any kind of
+display decoration (see [[info:elisp#Overlay Properties]]) can be
+used.
+
+You can preview the supported link types in the whole buffer, in the
+current section, active region or at point with the following commands:
+
+- {{{kbd(C-c C-x C-v)}}} (~org-link-preview~) ::
+
+  #+kindex: C-c C-x C-v
+  #+findex: org-link-preview
+  Create inline previews for external links in the active region, if
+  any; the link at point, if there is such; or in the current section
+  otherwise.  With a prefix argument, clear link previews at point or
+  in the current entry.  With a double prefix argument, preview all
+  links in the buffer.  With triple prefix argument, hide previews for
+  all links in the buffer.
+
+  By default, only links without descriptions are previewed.  You
+  can force displaying previews for all supported links (including
+  links with descriptions) using a numeric argument of ~1~.  This
+  will toggle all previews in the active region, the link at point
+  or the current section.  A numeric prefix argument of ~11~ will
+  toggle previews in the whole buffer instead.
+
+  #+vindex: org-startup-with-link-previews
+  Org mode can display link previews automatically when opening
+  buffers.  Either customize ~org-startup-with-link-previews~ or use
+  the =#+STARTUP: linkpreviews= keyword to enable previews for that
+  specific buffer when opening it.  =#+STARTUP: nolinkpreviews= will
+  disable previews on startup in the buffer.
+
+- {{{kbd(C-c C-x C-M-v)}}} (~org-link-preview-refresh~) ::
+
+  #+kindex: C-c C-x C-M-v
+  #+findex: org-link-preview-refresh
+  Assure inline display of external link previews in the whole buffer
+  and refresh them.
+
+- {{{kbd(M-x org-link-preview-region)}}} ::
+
+  #+findex: org-link-preview-region
+  Create inline previews for external links in the active region, or
+  the buffer.  With a prefix argument, also preview links with a text
+  description part.
+
+- {{{kbd(M-x org-link-preview-clear)}}} ::
+
+  #+findex: org-link-preview-clear
+  Clear external link previews in the active region, or the buffer.
+
+#+vindex: org-cycle-inline-images-display
+Link previews can also be displayed when cycling the folding state.
+When the custom option ~org-cycle-link-previews-display~ is set,
+supported link types under the subtree (including images) will be
+displayed automatically.
+
+*** Images
 :PROPERTIES:
 :DESCRIPTION: Display an image.
 :END:
@@ -11803,95 +11873,76 @@ make sure that the link is on a line by itself and precede it with
 [[./img/a.jpg]]
 #+end_example
 
-Such images can be displayed within the buffer with the following
-command:
+When link previews are displayed as images, the image size and
+alignment can be further customized.
 
-- {{{kbd(C-c C-x C-v)}}} (~org-toggle-inline-images~) ::
+#+vindex: org-image-actual-width
+#+vindex: org-image-max-width
+#+cindex: @samp{ORG-IMAGE-ACTUAL-WIDTH}, property
+By default, Org mode displays inline images according to their
+actual width, but no wider than ~fill-column~ characters.
 
-  #+kindex: C-c C-x C-v
-  #+findex: org-toggle-inline-images
-  #+vindex: org-startup-with-inline-images
-  Toggle the inline display of linked images.  When called with a
-  prefix argument, also display images that do have a link
-  description.  You can ask for inline images to be displayed at
-  startup by configuring the variable
-  ~org-startup-with-inline-images~[fn:: The variable
-  ~org-startup-with-inline-images~ can be set within a buffer with the
-  =STARTUP= options =inlineimages= and =noinlineimages=.].
-
-
-  #+vindex: org-image-actual-width
-  #+vindex: org-image-max-width
-  #+cindex: @samp{ORG-IMAGE-ACTUAL-WIDTH}, property
-  By default, Org mode displays inline images according to their
-  actual width, but no wider than ~fill-column~ characters.
-
-  You can customize the displayed image width using
-  ~org-image-actual-width~ variable (globally) or
-  =ORG-IMAGE-ACTUAL-WIDTH= property (subtree-level)[fn:: The width can
-  be customized in Emacs >= 24.1, built with ImageMagick support.].
-  Their value can be the following:
-  - (default) Non-~nil~, use the actual width of images when inlining
-    them.  If the actual width is too wide, limit it according to
-    ~org-image-max-width~.
-  - When set to a number, use ImageMagick (when available) to set the
-    image's width to this value.
-  - When set to a number in a list, try to get the width from any
-    =#+ATTR.*= keyword if it matches a width specification like:
-    #+begin_example
-    ,#+ATTR_HTML: :width 300px
-    #+end_example
-    and fall back on that number if none is found.
-  - When set to ~nil~, try to get the width from an =#+ATTR.*= keyword
-    and fall back on the original width or ~org-image-max-width~ if
-    none is found.
-
-  ~org-image-max-width~ limits the maximum displayed image width, but
-  only when the image width is not set explicitly.  Possible maximum
-  width can be set to:
-  - (default) ~fill-column~, limit width to ~fill-column~ number of
-    characters.
-  - ~window~, limit width to current window width.
-  - integer number, limit width to that specified number of pixels.
-  - ~nil~, do not limit the width.
-
-  #+vindex: org-image-align
-  Org mode can left-align, center or right-align the display of inline
-  images.  This setting is controlled (globally) by ~org-image-align~.
-  Only standalone images are affected, corresponding to links with no
-  surrounding text in their paragraph except for whitespace.  Its
-  value can be the following:
-  - (default) The symbol ~left~, which inserts the image where the
-    link appears in the buffer.
-  - The symbol ~center~, which will preview links centered in the
-    Emacs window.
-  - The symbol ~right~, which will preview links right-aligned in the
-    Emacs window.
-
-  Inline image alignment can be specified for each link using the
-  =#+ATTR.*= keyword if it matches an alignment specification like:
+You can customize the displayed image width using
+~org-image-actual-width~ variable (globally) or
+=ORG-IMAGE-ACTUAL-WIDTH= property (subtree-level)[fn:: The width can
+be customized in Emacs >= 24.1, built with ImageMagick support.].
+Their value can be the following:
+- (default) Non-~nil~, use the actual width of images when inlining
+  them.  If the actual width is too wide, limit it according to
+  ~org-image-max-width~.
+- When set to a number, use ImageMagick (when available) to set the
+  image's width to this value.
+- When set to a number in a list, try to get the width from any
+  =#+ATTR.*= keyword if it matches a width specification like:
   #+begin_example
-  ,#+ATTR_HTML: :align center
+  ,#+ATTR_HTML: :width 300px
   #+end_example
-  Org will use the alignment specification from any =#+ATTR.*=
-  keyword, such as =#+ATTR_HTML= or =#+ATTR_LATEX=, but =#+ATTR_ORG=
-  (if present) will override the others.  For instance, this link
-  #+begin_example
-  ,#+ATTR_HTML: :align right
-  ,#+ATTR_ORG: :align center
-  [[/path/to/image/file.png]]
-  #+end_example
-  will be displayed centered in Emacs but exported right-aligned to
-  HTML.
+  and fall back on that number if none is found.
+- When set to ~nil~, try to get the width from an =#+ATTR.*= keyword
+  and fall back on the original width or ~org-image-max-width~ if
+  none is found.
 
-  When =#+ATTR_ORG= is not set, inline image alignment is also read
-  from the =:center= attribute supported by some export backends (like
-  HTML, LaTeX and Beamer.)
+~org-image-max-width~ limits the maximum displayed image width, but
+only when the image width is not set explicitly.  Possible maximum
+width can be set to:
+- (default) ~fill-column~, limit width to ~fill-column~ number of
+  characters.
+- ~window~, limit width to current window width.
+- integer number, limit width to that specified number of pixels.
+- ~nil~, do not limit the width.
 
-#+vindex: org-cycle-inline-images-display
-Inline images can also be displayed when cycling the folding state.
-When custom option ~org-cycle-inline-images-display~ is set, the
-visible inline images under subtree will be displayed automatically.
+#+vindex: org-image-align
+Org mode can left-align, center or right-align the display of inline
+images.  This setting is controlled (globally) by ~org-image-align~.
+Only standalone images are affected, corresponding to links with no
+surrounding text in their paragraph except for whitespace.  Its
+value can be the following:
+- (default) The symbol ~left~, which inserts the image where the
+  link appears in the buffer.
+- The symbol ~center~, which will preview links centered in the
+  Emacs window.
+- The symbol ~right~, which will preview links right-aligned in the
+  Emacs window.
+
+Inline image alignment can be specified for each link using the
+=#+ATTR.*= keyword if it matches an alignment specification like:
+#+begin_example
+,#+ATTR_HTML: :align center
+#+end_example
+Org will use the alignment specification from any =#+ATTR.*=
+keyword, such as =#+ATTR_HTML= or =#+ATTR_LATEX=, but =#+ATTR_ORG=
+(if present) will override the others.  For instance, this link
+#+begin_example
+,#+ATTR_HTML: :align right
+,#+ATTR_ORG: :align center
+[[/path/to/image/file.png]]
+#+end_example
+will be displayed centered in Emacs but exported right-aligned to
+HTML.
+
+When =#+ATTR_ORG= is not set, inline image alignment is also read from
+the =:center= attribute supported by some export backends (like HTML,
+LaTeX and Beamer.)
 
 ** Captions
 :PROPERTIES:
@@ -16586,7 +16637,7 @@ BACKEND is the export backend being used, as a symbol."
    (lambda ()
      (delete-region (point) (line-beginning-position 2))
      ;; We need to tell `org-map-entries' to not skip over heading at
-     ;; point. Otherwise, it would continue from _next_ heading. See
+     ;; point.  Otherwise, it would continue from _next_ heading.  See
      ;; the docstring of `org-map-entries' for details.
      (setq org-map-continue-from (point)))))
 
@@ -17696,7 +17747,7 @@ Org currently includes the following export processors:
   - bibtex :: this export processor uses BibTeX, the historical
     bibliographic processor used with LaTeX, thus allowing the use of
     data and style files compatible with this processor (including a
-    large number of publishers' styles). It only supports LaTeX's
+    large number of publishers' styles).  It only supports LaTeX's
     =\cite= and =\nocite= commands.
 
   - natbib :: as with the =bibtex= processor, but using the LaTeX
@@ -17741,15 +17792,15 @@ your LaTeX installation, it won't export to anything but PDF.
 #+vindex: org-cite-biblatex-options
 #+texinfo: @noindent
 specifies the =biblatex= export processor with the default =numeric=
-style and the =bibtex= backend. Always define the style first and then
+style and the =bibtex= backend.  Always define the style first and then
 the rest of load-time options for the =biblatex=
-package. Alternatively, you can use the ~key=val,key=val~ format for
+package.  Alternatively, you can use the ~key=val,key=val~ format for
 the options as documented in the =biblatex= package documentation:
 
 : #+cite_export: biblatex backend=bibtex,style=numeric
 
 The ~org-cite-biblatex-options~ variable in your Emacs configuration
-uses this format. It will only export to PDF, since it relies on the
+uses this format.  It will only export to PDF, since it relies on the
 ~biblatex~ processor of your LaTeX installation.
 
 ** Bibliography printing
@@ -18589,11 +18640,12 @@ variable ~default-directory~.  Setting =mkdirp= header argument to
 a non-~nil~ value creates the directory, if necessary.
 
 Setting =dir= to the symbol ~attach~ or the string ~"'attach"~ will
-set =dir= to the directory returned by ~(org-attach-dir)~, set =:mkdir
-yes=, and insert any file paths, as when using =:results file=, which
-are under the node's attachment directory using =attachment:= links
-instead of the usual =file:= links.  Any returned path outside the
-attachment directory will use =file:= links as per usual.
+set =dir= to the directory returned by ~(org-attach-dir)~, set
+=:mkdirp yes=, and insert any file paths, as when using =:results
+file=, which are under the node's attachment directory using
+=attachment:= links instead of the usual =file:= links.  Any returned
+path outside the attachment directory will use =file:= links as per
+usual.
 
 For example, to save the plot file in the =Work/= folder of the home
 directory---notice tilde is expanded:
@@ -19460,10 +19512,10 @@ the tangled file's executable permission.
 The =tangle-mode= header argument specifies what permissions to set
 for tangled files by ~set-file-modes~.  Permissions are given by an
 octal value, which can be provided calling the ~identity~ function on
-an elisp octal value. For instance, to create a read-only file one may
-use =:tangle-mode (identity #o444)=. To reduce the verbosity required,
-an octal shorthand is defined, =oXXX= (=o= for octal). Using this, our
-read-only example is =:tangle-mode o444=. Omitting the =o= prefix will
+an elisp octal value.  For instance, to create a read-only file one may
+use =:tangle-mode (identity #o444)=.  To reduce the verbosity required,
+a octal shorthand is defined, =oXXX= (=o= for octal).  Using this, our
+read-only example is =:tangle-mode o444=.  Omitting the =o= prefix will
 cause the argument to be interpreted as an integer, which can lead to
 unexpected results (=444= is the same as =o674=).
 Two other shorthands are recognized, ls-style strings like
@@ -19472,7 +19524,7 @@ Note that chmod-style permissions are based on
 ~org-babel-tangle-default-file-mode~, which is =#o544= by default.
 
 When =:tangle-mode= and =:shebang= are both specified, the give
-=:tangle-mode= will override the permissions from =:shebang=. When
+=:tangle-mode= will override the permissions from =:shebang=.  When
 multiple source code blocks tangle to a single file with conflicting
 =:tangle-mode= header arguments, Org's behavior is undefined.
 
@@ -21650,6 +21702,49 @@ of ~org-yank-dnd-method~.  Image files pasted this way also respect
 the value of ~org-yank-image-save-method~ when the action to perform
 is =attach=.
 
+** Repeating commands
+:PROPERTIES:
+:DESCRIPTION: Repeating navigation commands
+:END:
+
+#+cindex: repeat-mode, org-mode
+#+cindex: repeating navigation commands
+When ~repeat-mode~ is turned on, headline motion commands, link and
+block navigation commands by only pressing a single key.  For example,
+instead of typing {{{kbd(C-c C-n)}}} repeatedly, you can just type
+{{{kbd(C-c C-n n n n p u ...)}}} to move to different headlines.  When
+a key not in the map is pressed, it exits ~repeat-mode~ and the
+command corresponding to the key is executed (see the
+[[info:emacs#Repeating][Emacs user manual]] for more details).
+
+By default, the following commands are made repeatable in separate
+keymaps.
+
+~org-navigation-repeat-map~:
+
+| Command                           | Key binding        | Repeat key   |
+|-----------------------------------+--------------------+--------------|
+| ~org-next-visible-heading~        | {{{kbd(C-c C-n)}}} | {{{kbd(n)}}} |
+| ~org-previous-visible-heading~    | {{{kbd(C-c C-p)}}} | {{{kbd(p)}}} |
+| ~org-forward-heading-same-level~  | {{{kbd(C-c C-f)}}} | {{{kbd(f)}}} |
+| ~org-backward-heading-same-level~ | {{{kbd(C-c C-b)}}} | {{{kbd(b)}}} |
+| ~org-up-heading~                  | {{{kbd(C-c C-u)}}} | {{{kbd(u)}}} |
+
+
+~org-block-navigation-repeat-map~:
+
+| Command              | Key binding        | Repeat key   |
+|----------------------+--------------------+--------------|
+| ~org-next-block~     | {{{kbd(C-c M-f)}}} | {{{kbd(f)}}} |
+| ~org-previous-block~ | {{{kbd(C-c M-b)}}} | {{{kbd(b)}}} |
+
+~org-link-navigation-repeat-map~:
+
+| Command             | Key binding            | Repeat key   |
+|---------------------+------------------------+--------------|
+| ~org-next-link~     | {{{kbd(C-c C-x C-n)}}} | {{{kbd(n)}}} |
+| ~org-previous-link~ | {{{kbd(C-c C-x C-p)}}} | {{{kbd(p)}}} |
+
 * Hacking
 :PROPERTIES:
 :DESCRIPTION: How to hack your way around.
@@ -21785,6 +21880,67 @@ A review of =ol-man.el=:
    makes a link string by combining the =man:= prefix with the man
    topic.  It also provides a default description.  The function
    ~org-insert-link~ can insert it back into an Org buffer later on.
+
+** Adding Hyperlink preview
+:PROPERTIES:
+:DESCRIPTION: Preview behavior for new hyperlink types.
+:END:
+#+cindex: hyperlinks, adding preview behavior
+
+By default, Org supports previewing external links for links ot type
+=file= and =attachment= that point to image files. (See [[*Images]].)
+
+Support for previewing other link types inline can be added to Org in
+the following way:
+
+1. Add a =:preview= link parameter to the link type using
+   ~org-link-set-parameters~.  As an example, here we add previews for
+   the =docview= link type.
+
+   #+begin_src emacs-lisp
+(org-link-set-parameters
+ "docview" :preview #'org-link-docview-preview)
+   #+end_src
+
+2. The value of the =:preview= parameter must be a function that
+   accepts three arguments:
+   - an overlay placed from the start to the end of the link,
+   - the link path, as a string, and
+   - the syntax node for the link.
+   It must return a non-nil value to indicate preview success.  A
+   value of =nil= implies that the preview failed, and the overlay
+   placed on the link will be removed.
+
+   In our example, we use the =convert= program (part of the
+   =imagemagick= suite of tools) to create the thumbnail that is
+   displayed inline.
+
+   #+begin_src emacs-lisp
+(defun org-link-docview-preview (ov path _elem)
+  "Preview file at PATH in overlay OV.
+
+_ELEM is the syntax node of the link element."
+  (when (executable-find "convert")
+    (let* ((path (expand-file-name (substitute-in-file-name path)))
+           (output-file (expand-file-name (concat "org-docview-preview-"
+                                                  (substring (sha1 path) 0 10)
+                                                  ".png")
+                                          temporary-file-directory)))
+      ;; Create or find preview for path
+      (when (or (file-readable-p output-file)
+                (= 0 (call-process
+                      "convert"
+                      nil (get-buffer-create "*Org Docview Preview Output*") nil
+                      "-thumbnail" "x320" "-colorspace" "rgb"
+                      "-background" "white" "-alpha" "remove" "-strip"
+                      (concat path "[0]") output-file)))
+        ;; If preview image is available, display it via the overlay
+        (overlay-put ov 'display (create-image output-file))))))
+   #+end_src
+
+3. Now previews of docview links for supported document types (PDF,
+   djvu) are generated (along with image file previews) when calling
+   ~org-link-preview~.
 
 ** Adding Export Backends
 :PROPERTIES:
@@ -22734,42 +22890,32 @@ know what I am missing here!
 :UNNUMBERED: notoc
 :END:
 
-I (Bastien) have been maintaining Org between 2011 and 2013.  This
-appendix would not be complete without adding a few more
-acknowledgments and thanks.
-
-I am first grateful to Carsten for his trust while handing me over the
-maintainership of Org.  His unremitting support is what really helped
-me getting more confident over time, with both the community and the
-code.
-
-When I took over maintainership, I knew I would have to make Org more
-collaborative than ever, as I would have to rely on people that are
-more knowledgeable than I am on many parts of the code.  Here is
-a list of the persons I could rely on, they should really be
-considered co-maintainers, either of the code or the community:
+I started maintaining Org in January 2011 and officially stepped down
+in December 2024, when Ihor Radchenko agreed to become the new Org
+maintainer.  I was active for the first few years, then my involvement
+slowly decreased thanks to the help of new core contributors whom I'd
+like to thank.
 
 - Eric Schulte ::
 
-  Eric is maintaining the Babel parts of Org.  His reactivity here
-  kept me away from worrying about possible bugs here and let me focus
-  on other parts.
+  Eric has been maintaining the Babel parts of Org.  His reactivity
+  here kept me away from worrying about possible bugs here and let me
+  focus on other parts.
 
 - Nicolas Goaziou ::
 
-  Nicolas is maintaining the consistency of the deepest parts of Org.
+  Nicolas was maintaining the consistency of the deepest parts of Org.
   His work on =org-element.el= and =ox.el= has been outstanding, and
-  it opened the doors for many new ideas and features.  He rewrote
-  many of the old exporters to use the new export engine, and helped
-  with documenting this major change.  More importantly (if that's
-  possible), he has been more than reliable during all the work done
-  for Org 8.0, and always very reactive on the mailing list.
+  it opened the doors for many new ideas and features.  He rewrote old
+  exporters and helped with documenting this change.  More importantly
+  (if that's possible), he has been more than reliable during all the
+  work done for Org 8.0.
 
 - Achim Gratz ::
 
   Achim rewrote the building process of Org, turning some /ad hoc/
-  tools into a flexible and conceptually clean process.  He patiently
-  coped with the many hiccups that such a change can create for users.
+  scripts into a stable process.  He patiently coped with the many
+  hiccups that such a change can create for users.
 
 - Nick Dokos ::
 
@@ -22778,9 +22924,30 @@ considered co-maintainers, either of the code or the community:
   overestimate such a great help, and the list would not be so active
   without him.
 
+- Kyle Meyer ::
+
+  Kyle is maintaining [[https://list.orgmode.org][list.orgmode.org]]
+  and takes care of backporting upstream GNU Emacs changes into Org's
+  repository.  He also helped tremendously on the mailing list and in
+  private, patiently answering questions, competently providing advice
+  and solutions.
+
+- Ihor Radchenko ::
+
+  Ihor became Org maintainer in December 2024, and I'm very grateful
+  to him for agreeing to take on this role.  His responsiveness on the
+  mailing list, his determination to improve Org as a core format and
+  an ecosystem of tools, his clarity about strategic changes that need
+  to be made make him an asset for the Org community.
+
 I received support from so many users that it is clearly impossible to
 be fair when shortlisting a few of them, but Org's history would not
 be complete if the ones above were not mentioned in this manual.
+
+Of course, I'm also grateful grateful to Carsten for his trust while
+handing me over the maintainership of Org.  His unremitting support is
+what really helped me getting more confident over time, with both the
+community and the code.
 
 ** List of Contributions
 :PROPERTIES:
@@ -23236,7 +23403,7 @@ than 30 stars.  This is a hard-coded limitation of ~lmax~ in
 2003, not the beginning of time.
 
 [fn:29] On computers using macOS, idleness is based on actual user
-idleness, not just Emacs' idle time.  For X11, you can install a
+idleness, not just Emacs's idle time.  For X11, you can install a
 utility program =x11idle.c=, available in the =org-contrib/=
 repository, or install the xprintidle package and set it to the
 variable ~org-clock-x11idle-program-name~ if you are running Debian,

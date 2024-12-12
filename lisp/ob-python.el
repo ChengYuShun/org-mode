@@ -36,6 +36,8 @@
 (require 'org-macs)
 (require 'python)
 
+(require 'subr-x) ; For `string-trim-right', Emacs < 28
+
 (defvar org-babel-tangle-lang-exts)
 (add-to-list 'org-babel-tangle-lang-exts '("python" . "py"))
 
@@ -269,7 +271,7 @@ results as a string."
   "Return non-nil if the last prompt matches input prompt.
 Backport of `python-util-comint-end-of-output-p' to emacs28.  To
 be removed after minimum supported version reaches emacs29."
-  (when-let ((prompt (python-util-comint-last-prompt)))
+  (when-let* ((prompt (python-util-comint-last-prompt)))
     (python-shell-comint-end-of-output-p
      (buffer-substring-no-properties
       (car prompt) (cdr prompt)))))
@@ -279,7 +281,7 @@ be removed after minimum supported version reaches emacs29."
 This checks `org-babel-python-command', and then
 `org-babel-python-command-session' (if IS-SESSION) or
 `org-babel-python-command-nonsession' (if not IS-SESSION).  If
-IS-SESSION, this might return `nil', which means to use
+IS-SESSION, this might return nil, which means to use
 `python-shell-calculate-command'."
   (or (unless (eq org-babel-python-command 'auto)
         org-babel-python-command)
@@ -300,7 +302,7 @@ unless the Python session was created outside Org."
 (defun org-babel-python-initiate-session-by-key (&optional session)
   "Initiate a python session.
 If there is not a current inferior-process-buffer matching
-SESSION then create it. If inferior process already
+SESSION then create it.  If inferior process already
 exists (e.g. if it was manually started with `run-python'), make
 sure it's configured to work with ob-python.  If session has
 already been configured as such, do nothing.  Return the
@@ -356,7 +358,7 @@ initialized session."
 (defun org-babel-python-initiate-session (&optional session _params)
   "Initiate Python session named SESSION according to PARAMS.
 If there is not a current inferior-process-buffer matching
-SESSION then create it. If inferior process already
+SESSION then create it.  If inferior process already
 exists (e.g. if it was manually started with `run-python'), make
 sure it's configured to work with ob-python.  If session has
 already been configured as such, do nothing."
@@ -451,31 +453,22 @@ __org_babel_python_format_value(main(), '%s', %s)")
 (defun org-babel-python-send-string (session body)
   "Pass BODY to the Python process in SESSION.
 Return output."
-  (with-current-buffer session
-    (let* ((string-buffer "")
-	   (comint-output-filter-functions
-	    (cons (lambda (text) (setq string-buffer
-				       (concat string-buffer text)))
-		  comint-output-filter-functions))
-	   (body (format "\
+  (org-babel-chomp
+   (string-trim-right
+    (org-babel-comint-with-output
+        ((org-babel-session-buffer:python session)
+         org-babel-python-eoe-indicator
+         nil nil 'disable-prompt-filtering)
+      (python-shell-send-string (format "\
 try:
 %s
 except:
     raise
 finally:
     print('%s')"
-			 (org-babel-python--shift-right body 4)
-			 org-babel-python-eoe-indicator)))
-      (let ((python-shell-buffer-name
-	     (org-babel-python-without-earmuffs session)))
-	(python-shell-send-string body))
-      ;; same as `python-shell-comint-end-of-output-p' in emacs-25.1+
-      (while (not (and (python-shell-comint-end-of-output-p string-buffer)
-                       (string-match
-		        org-babel-python-eoe-indicator
-		        string-buffer)))
-	(accept-process-output (get-buffer-process (current-buffer))))
-      (org-babel-chomp (substring string-buffer 0 (match-beginning 0))))))
+			                (org-babel-python--shift-right body 4)
+			                org-babel-python-eoe-indicator)))
+    (rx (literal org-babel-python-eoe-indicator) (zero-or-more anychar)))))
 
 (defun org-babel-python-evaluate-session
     (session body &optional result-type result-params graphics-file)
@@ -538,7 +531,8 @@ by `org-babel-comint-async-filter'."
   (org-babel-comint-async-register
    session (current-buffer)
    "ob_comint_async_python_\\(start\\|end\\|file\\)_\\(.+\\)"
-   'org-babel-chomp 'org-babel-python-async-value-callback)
+   'org-babel-chomp 'org-babel-python-async-value-callback
+   'disable-prompt-filtering)
   (pcase result-type
     (`output
      (let ((uuid (org-id-uuid)))

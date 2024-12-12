@@ -341,50 +341,51 @@ When `org-refile-use-cache' is nil, just return POS."
 	       (org-with-wide-buffer
 		(goto-char (point-min))
 		(setq org-outline-path-cache nil)
-		(while (re-search-forward descre nil t)
-		  (forward-line 0)
-		  (let ((case-fold-search nil))
-		    (looking-at org-complex-heading-regexp))
-		  (let ((begin (point))
-			(heading (match-string-no-properties 4)))
-		    (unless (or (and
-				 org-refile-target-verify-function
-				 (not
-				  (funcall org-refile-target-verify-function)))
-				(not heading))
-		      (let ((re (format org-complex-heading-regexp-format
-					(regexp-quote heading)))
-			    (target
-			     (if (not org-refile-use-outline-path) heading
-			       (mapconcat
-				#'identity
-				(append
-				 (pcase org-refile-use-outline-path
-				   (`file (list
+		(let ((base (pcase org-refile-use-outline-path
+			      (`file (list
+                                      (and (buffer-file-name (buffer-base-buffer))
+                                           (file-name-nondirectory
+                                            (buffer-file-name (buffer-base-buffer))))))
+                              (`title (list
+                                       (or (org-get-title)
                                            (and (buffer-file-name (buffer-base-buffer))
                                                 (file-name-nondirectory
-                                                 (buffer-file-name (buffer-base-buffer))))))
-                                   (`title (list
-                                            (or (org-get-title)
-                                                (and (buffer-file-name (buffer-base-buffer))
-                                                     (file-name-nondirectory
-                                                      (buffer-file-name (buffer-base-buffer)))))))
-                                   (`full-file-path
-				    (list (buffer-file-name
-					   (buffer-base-buffer))))
-				   (`buffer-name
-				    (list (buffer-name
-					   (buffer-base-buffer))))
-				   (_ nil))
-				 (mapcar (lambda (s) (replace-regexp-in-string
-						 "/" "\\/" s nil t))
-					 (org-get-outline-path t t)))
-				"/"))))
-			(push (list target f re (org-refile-marker (point)))
-			      tgs)))
-		    (when (= (point) begin)
-		      ;; Verification function has not moved point.
-		      (end-of-line)))))))
+                                                 (buffer-file-name (buffer-base-buffer)))))))
+                              (`full-file-path
+			       (list (buffer-file-name
+				      (buffer-base-buffer))))
+			      (`buffer-name
+			       (list (buffer-name
+				      (buffer-base-buffer))))
+			      (_ nil))))
+		  (while (re-search-forward descre nil t)
+		    (forward-line 0)
+		    (let ((case-fold-search nil))
+		      (looking-at org-complex-heading-regexp))
+		    (let ((begin (point))
+			  (heading (match-string-no-properties 4)))
+		      (unless (or (and
+				   org-refile-target-verify-function
+				   (not
+				    (funcall org-refile-target-verify-function)))
+				  (not heading))
+		        (let ((re (format org-complex-heading-regexp-format
+					  (regexp-quote heading)))
+			      (target
+			       (if (not org-refile-use-outline-path) heading
+			         (mapconcat
+				  #'identity
+				  (append
+				   base
+				   (mapcar (lambda (s) (replace-regexp-in-string
+						        "/" "\\/" s nil t))
+					   (org-get-outline-path t t)))
+				  "/"))))
+			  (push (list target f re (org-refile-marker (point)))
+			        tgs)))
+		      (when (= (point) begin)
+		        ;; Verification function has not moved point.
+		        (end-of-line))))))))
 	    (when org-refile-use-cache
 	      (org-refile-cache-put tgs (buffer-file-name) descre))
 	    (setq targets (append tgs targets))))))
@@ -470,8 +471,8 @@ See also `org-refile-use-outline-path'.
 
 If you are using target caching (see `org-refile-use-cache'), you
 have to clear the target cache in order to find new targets.
-This can be done with a `0' prefix (`C-0 C-c C-w') or a triple
-prefix argument (`C-u C-u C-u C-c C-w')."
+This can be done with a `0' prefix (\\`C-0 C-c C-w') or a triple
+prefix argument (\\`C-u C-u C-u C-c C-w')."
   (interactive "P")
   (if (member arg '(0 (64)))
       (org-refile-cache-clear)
@@ -544,6 +545,7 @@ prefix argument (`C-u C-u C-u C-c C-w')."
 	  (setq nbuf (find-file-noselect file 'nowarn))
 	  (if (and arg (not (equal arg 3)))
 	      (progn
+                (org-mark-ring-push)
 		(pop-to-buffer-same-window nbuf)
 		(goto-char (cond (pos)
 				 ((org-notes-order-reversed-p) (point-min))
@@ -634,6 +636,7 @@ prefix argument (`C-u C-u C-u C-c C-w')."
 (defun org-refile-goto-last-stored ()
   "Go to the location where the last refile was stored."
   (interactive)
+  (org-mark-ring-push)
   (bookmark-jump (plist-get org-bookmark-names-plist :last-refile))
   (message "This is the location of the last refile"))
 

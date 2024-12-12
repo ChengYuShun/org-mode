@@ -22,6 +22,8 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
+;;; Commentary:
+
 ;;; Code:
 
 (require 'org-macs)
@@ -356,18 +358,27 @@ a window into the `org-babel-get-src-block-info' function."
 	(full (lambda (it) (> (length it) 0)))
 	(printf (lambda (fmt &rest args) (princ (apply #'format fmt args)))))
     (when info
-      (with-help-window (help-buffer)
-	(let ((name        (nth 4 info))
-	      (lang        (nth 0 info))
-	      (switches    (nth 3 info))
-	      (header-args (nth 2 info)))
+      (let* ((name        (nth 4 info))
+	     (language    (nth 0 info))
+	     (switches    (nth 3 info))
+	     (header-args (nth 2 info))
+	     (property-header-args
+              (org-entry-get (point) "header-args" t))
+             (property-header-args-language
+              (org-entry-get (point) (concat "header-args:" language) t)))
+	(with-help-window (help-buffer)
 	  (when name            (funcall printf "Name: %s\n"     name))
-	  (when lang            (funcall printf "Lang: %s\n"     lang))
+	  (when language        (funcall printf "Language: %s\n"     language))
+          ;; Show header arguments that have been set through
+          ;; properties (i.e. in property drawers or through
+          ;; #+PROPERTY)
 	  (funcall printf "Properties:\n")
-	  (funcall printf "\t:header-args \t%s\n" (org-entry-get (point) "header-args" t))
-	  (funcall printf "\t:header-args:%s \t%s\n" lang (org-entry-get (point) (concat "header-args:" lang) t))
-
+	  (funcall printf "\t:header-args \t%s\n" property-header-args)
+	  (funcall printf "\t:header-args:%s \t%s\n" language property-header-args-language)
+          ;; Show switches
 	  (when (funcall full switches) (funcall printf "Switches: %s\n" switches))
+          ;; Show default header arguments and header arguments that
+          ;; have been explicitly set in the current code block.
 	  (funcall printf "Header Arguments:\n")
 	  (dolist (pair (sort header-args
 			      (lambda (a b) (string< (symbol-name (car a))
@@ -720,9 +731,17 @@ Otherwise, return a list with the following pattern:
 	       lang
 	       (org-babel--normalize-body datum)
 	       (apply #'org-babel-merge-params
-		      (if inline org-babel-default-inline-header-args
-			org-babel-default-header-args)
-		      (and (boundp lang-headers) (eval lang-headers t))
+                      ;; Use `copy-tree' to avoid creating shared structure
+                      ;; with the `org-babel-default-header-args-*' variables:
+                      ;; modifications by `org-babel-generate-file-param'
+                      ;; below would modify the shared structure, thereby
+                      ;; modifying the variables.
+  		    (copy-tree
+                       (if inline org-babel-default-inline-header-args
+                         org-babel-default-header-args)
+                       t)
+  		    (and (boundp lang-headers)
+                           (copy-tree (eval lang-headers t) t))
 		      (append
 		       ;; If DATUM is provided, make sure we get node
 		       ;; properties applicable to its location within
@@ -868,7 +887,7 @@ guess will be made."
 		 (default-directory
 		  (cond
 		   ((not dir) default-directory)
-                   ((when-let ((session (org-babel-session-buffer info)))
+                   ((when-let* ((session (org-babel-session-buffer info)))
                       (buffer-local-value 'default-directory (get-buffer session))))
 		   ((member mkdirp '("no" "nil" nil))
 		    (file-name-as-directory (expand-file-name dir)))
@@ -1074,10 +1093,19 @@ completion from lists of common args and values."
       (unless (= (char-before (point)) ?\ ) (insert " "))
       (insert ":" header-arg) (when value (insert " " value)))))
 
+(defun org-babel-in-src-block-header-p ()
+  "Return non-nil when `point' is in the header line of the source block."
+  (let ((beg (org-babel-where-is-src-block-head)))
+    (when beg
+      (let ((end (save-excursion (goto-char beg) (end-of-line) (point))))
+        (and (>= (point) beg) (<= (point) end))))))
+
 ;; Add support for completing-read insertion of header arguments after ":"
 (defun org-babel-header-arg-expand ()
-  "Call `org-babel-enter-header-arg-w-completion' in appropriate contexts."
-  (when (and (equal (char-before) ?\:) (org-babel-where-is-src-block-head))
+  "Call `org-babel-enter-header-arg-w-completion' in appropriate contexts
+(the header line of a source block)."
+  (when (and (equal (char-before) ?\:)
+             (org-babel-in-src-block-header-p))
     (org-babel-enter-header-arg-w-completion (match-string 2))))
 
 (defun org-babel-enter-header-arg-w-completion (&optional lang)
@@ -1238,6 +1266,9 @@ evaluation mechanisms."
    (save-match-data (org-element-context))
    '(babel-call inline-babel-call inline-src-block src-block)))
 
+(defvar org-babel-results-buffer-name "*Org Babel Results*"
+  "The buffer name of Org Babel evaluate results.")
+
 ;;;###autoload
 (defun org-babel-open-src-block-result (&optional re-run)
   "Open results of source block at point.
@@ -1261,7 +1292,7 @@ exist."
        (if (looking-at org-link-bracket-re) (org-open-at-point)
 	 (let ((r (org-babel-format-result (org-babel-read-result)
 					   (cdr (assq :sep arguments)))))
-	   (pop-to-buffer (get-buffer-create "*Org Babel Results*"))
+	   (pop-to-buffer (get-buffer-create org-babel-results-buffer-name))
 	   (erase-buffer)
 	   (insert r)))
        t))
@@ -2134,7 +2165,14 @@ block of the same language as the previous."
                   (list (point))))
                (n (- (length parts) 2)) ;; 1 or 2 parts in `dolist' below.
                ;; `post-blank' caches the property before setting it to 0.
-               (post-blank (org-element-property :post-blank copy)))
+               (post-blank (org-element-property :post-blank copy))
+               (to-uppercase
+                (lambda (str)
+                  (string-match "^[ \t]*#\\+\\(begin_src\\)" str)
+                  (setq str (replace-match "BEGIN_SRC" t t str 1))
+                  (string-match "^[ \t]*#\\+\\(end_src\\)" str)
+                  (setq str (replace-match "END_SRC" t t str 1))
+                  str)))
           ;; Point or region are within body when parts is in increasing order.
           (unless (apply #'<= parts)
             (user-error "Select within the source block body to split it"))
@@ -2154,7 +2192,12 @@ block of the same language as the previous."
           ;; Set `:post-blank' to 0.  We take care of spacing between blocks.
           (org-element-put-property copy :post-blank 0)
           (org-element-put-property copy :value (car parts))
-          (insert (org-element-interpret-data copy))
+          (let ((copy-str (org-element-interpret-data copy)))
+            ;; `org-element-interpret-data' produces lower-case
+            ;; #+begin_src .. #+end_src
+            (when upper-case-p
+              (setq copy-str (funcall to-uppercase copy-str)))
+            (insert copy-str))
           ;; `org-indent-block' may see another `org-element' (e.g. paragraph)
           ;; immediately after the block.  Ensure to indent the inserted block
           ;; and move point to its end.
@@ -2171,7 +2214,12 @@ block of the same language as the previous."
             (when (= n 0)
               ;; Use `post-blank' to reset the property of the last block.
               (org-element-put-property copy :post-blank post-blank))
-            (insert (org-element-interpret-data copy))
+            (let ((copy-str (org-element-interpret-data copy)))
+              ;; `org-element-interpret-data' produces lower-case
+              ;; #+begin_src .. #+end_src
+              (when upper-case-p
+                (setq copy-str (funcall to-uppercase copy-str)))
+              (insert copy-str))
             ;; Ensure to indent the inserted block and move point to its end.
             (org-babel-previous-src-block 1)
             (org-indent-block)

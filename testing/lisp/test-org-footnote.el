@@ -57,6 +57,17 @@
   (should-error
    (org-test-with-temp-text "<point>Test"
      (org-footnote-new)))
+  ;; ... but not when inserting anonymous or inline footnote
+  (should
+   (org-test-with-temp-text "<point>Test"
+     (let ((org-footnote-define-inline t))
+       (org-footnote-new)
+       t)))
+  (should
+   (org-test-with-temp-text "<point>Test"
+     (let ((org-footnote-auto-label 'anonymous))
+       (org-footnote-new)
+       t)))
   ;; Error at keywords.
   (should-error
    (org-test-with-temp-text "#+TIT<point>LE: value"
@@ -522,6 +533,26 @@ Text[fn:1][fn:4]
 \[fn:2] Def 2[fn:3]
 
 \[fn:4] Def 4
+"
+      (let ((org-footnote-section nil)) (org-footnote-sort))
+      (buffer-string))))
+  ;; Handle cycles inside nested references
+  (should
+   (equal
+    "
+One [fn:2] two [fn:1]
+
+[fn:2] Two [fn:1]
+
+[fn:1] One [fn:2]
+"
+    (org-test-with-temp-text
+	"
+One [fn:2] two [fn:1]
+
+[fn:1] One [fn:2]
+
+[fn:2] Two [fn:1]
 "
       (let ((org-footnote-section nil)) (org-footnote-sort))
       (buffer-string))))
