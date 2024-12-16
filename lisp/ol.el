@@ -5,6 +5,8 @@
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
 
+;; Modified by Yushun Cheng on 2024-12-16.
+
 ;; This file is part of GNU Emacs.
 
 ;; GNU Emacs is free software; you can redistribute it and/or modify
@@ -1046,7 +1048,9 @@ according to the value of `org-display-remote-inline-images'."
 	    (other
 	     (message "Invalid value of `org-display-remote-inline-images': %S"
 		      other)
-	     nil))))
+	     nil)))
+         (image-dpi (org--get-image-dpi file-or-data remote?))
+         (display-dpi (float (org--get-display-dpi))))
     (when file-or-data
       (create-image file-or-data
 		    (and (image-type-available-p 'imagemagick)
@@ -1063,7 +1067,7 @@ according to the value of `org-display-remote-inline-images'."
                       (`nil nil)
                       (_ (error "Unsupported value of `org-image-max-width': %S"
                                 org-image-max-width)))
-                    :scale 1))))
+                    :scale (/ display-dpi image-dpi)))))
 
 (declare-function org-export-read-attribute "ox"
                   (attribute element &optional property))
