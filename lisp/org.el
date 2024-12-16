@@ -9,7 +9,7 @@
 ;; URL: https://orgmode.org
 ;; Package-Requires: ((emacs "26.1"))
 
-;; Modified by Yushun Cheng on 2024-08-02.
+;; Modified by Yushun Cheng from 2024-08-02 to 2024-12-16.
 
 ;; Version: 9.8-pre
 
@@ -16512,39 +16512,57 @@ a HTML file."
 	  (cdr (assq processing-type org-preview-latex-process-alist)))
 	 (programs (plist-get processing-info :programs))
 	 (error-message (or (plist-get processing-info :message) ""))
+         ;; If we want to use the image converter directly, we shall
+         ;; set this to the string "tex".
 	 (image-input-type (plist-get processing-info :image-input-type))
 	 (image-output-type (plist-get processing-info :image-output-type))
 	 (post-clean (or (plist-get processing-info :post-clean)
 			 '(".dvi" ".xdv" ".pdf" ".tex" ".aux" ".log"
 			   ".svg" ".png" ".jpg" ".jpeg" ".out")))
-	 (latex-header
-	  (or (plist-get processing-info :latex-header)
-	      (org-latex-make-preamble
-	       (org-export-get-environment (org-export-get-backend 'latex))
-	       org-format-latex-header
-	       'snippet)))
 	 (latex-compiler (plist-get processing-info :latex-compiler))
+	 (latex-header
+          (when latex-compiler
+	    (or (plist-get processing-info :latex-header)
+	        (org-latex-make-preamble
+	         (org-export-get-environment (org-export-get-backend 'latex))
+	         org-format-latex-header
+	         'snippet))))
+         ;; This is the temporary directory that contains everything
+         ;; and will eventually be removed.
 	 (tmpdir temporary-file-directory)
+         ;; This is the prefix that will be used to create various
+         ;; file names.
 	 (texfilebase (make-temp-name
 		       (expand-file-name "orgtex" tmpdir)))
 	 (texfile (concat texfilebase ".tex"))
+         ;; This is the image-size-adjusting parameter specified by
+         ;; `org-preview-latex-process-alist'.
 	 (image-size-adjust (or (plist-get processing-info :image-size-adjust)
 				'(1.0 . 1.0)))
+         ;; This is the calculated scale factor for the image.
 	 (scale (* (if buffer (car image-size-adjust) (cdr image-size-adjust))
 		   (or (plist-get options (if buffer :scale :html-scale)) 1.0)))
-	 (dpi (* scale (if (and buffer (display-graphic-p)) (org--get-display-dpi) 140.0)))
+         ;; It used to be the case that the scale factor will be
+         ;; divided by DPI before fed into "%S".  Therefore, this is
+         ;; somewhat not used for now.
+	 (dpi (* scale (if (and buffer (display-graphic-p))
+                           (org--get-display-dpi) 140.0)))
 	 (fg (or (plist-get options (if buffer :foreground :html-foreground))
 		 "Black"))
 	 (bg (or (plist-get options (if buffer :background :html-background))
 		 "Transparent"))
+         ;; Either transparent image converter or the normal image
+         ;; converter.
 	 (image-converter
           (or (and (string= bg "Transparent")
                    (plist-get processing-info :transparent-image-converter))
               (plist-get processing-info :image-converter)))
          (log-buf (get-buffer-create "*Org Preview LaTeX Output*"))
 	 (resize-mini-windows nil)) ;Fix Emacs flicker when creating image.
+    ;; Check whether the programs exist.
     (dolist (program programs)
       (org-check-external-command program error-message))
+    ;; The function `org-latex-color-format' helps format the color.
     (if (eq fg 'default)
 	(setq fg (org-latex-color :foreground))
       (setq fg (org-latex-color-format fg)))
@@ -16557,23 +16575,31 @@ a HTML file."
         (aset string (1- (length string)) ?%)
       (setq string (concat string "%")))
     (with-temp-file texfile
-      (insert latex-header)
-      (insert "\n\\begin{document}\n"
-	      "\\definecolor{fg}{rgb}{" fg "}%\n"
-	      (if bg
-		  (concat "\\definecolor{bg}{rgb}{" bg "}%\n"
-			  "\n\\pagecolor{bg}%\n")
-		"")
-	      "\n{\\color{fg}\n"
-	      string
-	      "\n}\n"
-	      "\n\\end{document}\n"))
+      (if (null latex-compiler)
+          ;; Leave the tex file with only the formula if no latex
+          ;; compiler is used.
+          (insert string)
+        (insert latex-header)
+        (insert "\n\\begin{document}\n"
+	        "\\definecolor{fg}{rgb}{" fg "}%\n"
+	        (if bg
+		    (concat "\\definecolor{bg}{rgb}{" bg "}%\n"
+			    "\n\\pagecolor{bg}%\n")
+		  "")
+	        "\n{\\color{fg}\n"
+	        string
+	        "\n}\n"
+	        "\n\\end{document}\n")))
     (let* ((err-msg (format "Please adjust `%s' part of \
 `org-preview-latex-process-alist'."
 			    processing-type))
 	   (image-input-file
-	    (org-compile-file
-	     texfile latex-compiler image-input-type err-msg log-buf))
+            (if latex-compiler
+	        (org-compile-file
+	         texfile latex-compiler image-input-type err-msg log-buf)
+              ;; Pass on the TEX file if no latex compiling is
+              ;; intended.
+              texfile))
 	   (image-output-file
 	    (org-compile-file
 	     image-input-file image-converter image-output-type err-msg log-buf
