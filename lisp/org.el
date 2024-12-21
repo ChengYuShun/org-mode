@@ -16128,13 +16128,13 @@ which defaults to 1.0."
     (overlay-put ov 'org-overlay-type 'org-latex-overlay)
     (overlay-put ov 'evaporate t)
     (overlay-put ov
-		 'modification-hooks
-		 (list (lambda (o _flag _beg _end &optional _l)
-			 (delete-overlay o))))
+        	 'modification-hooks
+        	 (list (lambda (o _flag _beg _end &optional _l)
+        		 (delete-overlay o))))
     (overlay-put ov
-		 'display
-		 `(image :type ,imagetype :file ,image :ascent center
-			 :scale ,(or scale 1.0)))))
+                 'display
+                 `(image :type ,imagetype :file ,image :ascent center
+                         :scale ,(or scale 1.0)))))
 
 (defun org-clear-latex-preview (&optional beg end)
   "Remove all overlays with LaTeX fragment images in current buffer.
@@ -16248,7 +16248,6 @@ PROCESSING-TYPE is the conversion method to use, as a symbol.
 
 Some of the options can be changed using the variable
 `org-format-latex-options', which see."
-  (when (and overlays (fboundp 'clear-image-cache)) (clear-image-cache))
   (unless (eq processing-type 'verbatim)
     (let* ((math-regexp "\\$\\|\\\\[([]\\|^[ \t]*\\\\begin{[A-Za-z0-9*]+}")
 	   (cnt 0)
@@ -16262,7 +16261,7 @@ Some of the options can be changed using the variable
       (while (re-search-forward math-regexp end t)
 	(unless (and overlays
 		     (eq (get-char-property (point) 'org-overlay-type)
-			 'org-latex-overlay))
+		         'org-latex-overlay))
 	  (let* ((context (org-element-context))
 		 (type (org-element-type context)))
 	    (when (memq type '(latex-environment latex-fragment))
