@@ -1049,8 +1049,7 @@ according to the value of `org-display-remote-inline-images'."
 	     (message "Invalid value of `org-display-remote-inline-images': %S"
 		      other)
 	     nil)))
-         (image-dpi (org--get-image-dpi file-or-data remote?))
-         (display-dpi (float (org--get-display-dpi))))
+         (scale (org--get-image-scale file-or-data remote? nil)))
     (when file-or-data
       (create-image file-or-data
 		    (and (image-type-available-p 'imagemagick)
@@ -1067,7 +1066,7 @@ according to the value of `org-display-remote-inline-images'."
                       (`nil nil)
                       (_ (error "Unsupported value of `org-image-max-width': %S"
                                 org-image-max-width)))
-                    :scale (/ display-dpi image-dpi)))))
+                    :scale scale))))
 
 (declare-function org-export-read-attribute "ox"
                   (attribute element &optional property))
