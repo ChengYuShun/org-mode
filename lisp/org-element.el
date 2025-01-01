@@ -244,8 +244,9 @@ specially in `org-element--object-lex'.")
 		":\\(?: \\|$\\|[-_[:word:]]+:[ \t]*$\\)" "\\|"
 		;; Horizontal rules.
 		"-\\{5,\\}[ \t]*$" "\\|"
-		;; LaTeX environments.
-		"\\\\begin{\\([A-Za-z0-9*]+\\)}" "\\|"
+		;; LaTeX environments.  This is modified because it
+		;; breaks environments inside "\[" and "\]".
+		"\\\\begin{\\(align\\*?\\)}" "\\|"
 		;; Clock lines.
 		org-element-clock-line-re "\\|"
 		;; Lists.
@@ -2758,14 +2759,14 @@ properties."
 ;;;; LaTeX Environment
 
 (defconst org-element--latex-begin-environment
-  "^[ \t]*\\\\begin{\\([A-Za-z0-9*]+\\)}"
+  "^[ \t]*\\\\begin{\\(align\\*?\\)}"
   "Regexp matching the beginning of a LaTeX environment.
 The environment is captured by the first group.
 
 See also `org-element--latex-end-environment'.")
 
 (defconst org-element--latex-begin-environment-nogroup
-  "^[ \t]*\\\\begin{[A-Za-z0-9*]+}"
+  "^[ \t]*\\\\begin{align\\*?}"
   "Regexp matching the beginning of a LaTeX environment.")
 
 (defconst org-element--latex-end-environment
@@ -3774,11 +3775,12 @@ Assume point is at the beginning of the LaTeX fragment."
 		(pcase (char-after (1+ (point)))
 		  (?\( (search-forward "\\)" nil t))
 		  (?\[ (search-forward "\\]" nil t))
-		  (_
-		   ;; Macro.
-		   (and (looking-at "\\\\[a-zA-Z]+\\*?\\(\\(\\[[^][\n{}]*\\]\\)\
-\\|\\({[^{}\n]*}\\)\\)*")
-			(match-end 0)))))
+		  (_ nil)))
+	           ;; Macro.  This is commented out since it blindly
+	           ;; matches "\begin{xxx}".
+                   ;;(and (looking-at "\\\\[a-zA-Z]+\\*?\\(\\(\\[[^][\n{}]*\\]\\)\
+;;\\|\\({[^{}\n]*}\\)\\)*")
+                        ;;(match-end 0)))))
 	       ((eq ?$ (char-after (1+ (point))))
 		(search-forward "$$" nil t 2))
 	       (t
@@ -7130,7 +7132,7 @@ If you observe Emacs hangs frequently, please report this to Org mode mailing li
 (defconst org-element--cache-sensitive-re
   (concat
    "^\\*+ " "\\|"
-   "\\\\end{[A-Za-z0-9*]+}[ \t]*$" "\\|"
+   "\\\\end{align\\*?}[ \t]*$" "\\|"
    "^[ \t]*\\(?:"
    "#\\+END\\(?:_\\|:?[ \t]*$\\)" "\\|"
    org-list-full-item-re "\\|"

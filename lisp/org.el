@@ -16288,7 +16288,7 @@ PROCESSING-TYPE is the conversion method to use, as a symbol.
 Some of the options can be changed using the variable
 `org-format-latex-options', which see."
   (unless (eq processing-type 'verbatim)
-    (let* ((math-regexp "\\$\\|\\\\[([]\\|^[ \t]*\\\\begin{[A-Za-z0-9*]+}")
+    (let* ((math-regexp "\\$\\|\\\\[([]\\|^[ \t]*\\\\begin{align\\*?}")
 	   (cnt 0)
 	   checkdir-flag)
       (goto-char (or beg (point-min)))
