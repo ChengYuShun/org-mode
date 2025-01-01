@@ -120,7 +120,8 @@ visited, i.e., where no Org built-in function have been loaded.
 Otherwise, autoload Org functions will mess up the installation.
 #+end_quote
 
-To avoid interference with built-in Org mode, you can use command line:
+To avoid interference with built-in Org mode, you can use command line
+(you need Emacs 30 or later):
 
 #+begin_src sh
 emacs -Q -batch -eval "(progn (require 'package) (package-initialize) (package-refresh-contents) (package-upgrade 'org))"
@@ -13758,8 +13759,8 @@ different ways on HTML pages.  The default is to use the
 with Org[fn:: By default, Org loads MathJax from
 [[https://www.jsdelivr.com/][jsDelivr]], as recommended in
 [[https://docs.mathjax.org/en/latest/web/start.html][Getting Started
-with MathJax Components]].][fn:47].  Some MathJax display options can
-be configured via ~org-html-mathjax-options~, or in the buffer.  For
+with MathJax Components]].][fn:47].  Some MathJax options can be
+configured via ~org-html-mathjax-options~, or in the buffer.  For
 example, with the following settings,
 
 #+begin_example
@@ -13769,6 +13770,12 @@ example, with the following settings,
 #+texinfo: @noindent
 equation labels are displayed on the left margin and equations are
 five ems from the left margin.
+
+To use a local copy of MathJax, use =path= option:
+
+#+begin_example
+,#+HTML_MATHJAX: path:the/path/to/mathjax.js
+#+end_example
 
 #+vindex: org-html-mathjax-template
 See the docstring of ~org-html-mathjax-options~ for all supported
@@ -19522,7 +19529,7 @@ unexpected results (=444= is the same as =o674=).
 Two other shorthands are recognized, ls-style strings like
 =rw-r--r--=, and chmod-style permissions like =g+w=.
 Note that chmod-style permissions are based on
-~org-babel-tangle-default-file-mode~, which is =#o544= by default.
+~org-babel-tangle-default-file-mode~, which is =#o644= by default.
 
 When =:tangle-mode= and =:shebang= are both specified, the give
 =:tangle-mode= will override the permissions from =:shebang=.  When
@@ -21320,14 +21327,14 @@ name, e.g., =Org: store-link= and enter this as /Location/:
 
 #+begin_example
 javascript:location.href='org-protocol://store-link?' +
-      new URLSearchParams({url:location.href, title:document.title});
+      new URLSearchParams({url:location.href, title:document.title});void(0);
 #+end_example
 
 Title is an optional parameter.  Another expression was recommended earlier:
 
 #+begin_example
 javascript:location.href='org-protocol://store-link?url='+
-      encodeURIComponent(location.href);
+      encodeURIComponent(location.href);void(0);
 #+end_example
 
 The latter form is compatible with older Org versions from 9.0 to 9.4.
@@ -21352,6 +21359,7 @@ javascript:location.href='org-protocol://capture?' +
       new URLSearchParams({
             template: 'x', url: window.location.href,
             title: document.title, body: window.getSelection()});
+      void(0);
 #+end_example
 
 You might have seen another expression:
@@ -21360,7 +21368,7 @@ You might have seen another expression:
 javascript:location.href='org-protocol://capture?template=x'+
       '&url='+encodeURIComponent(window.location.href)+
       '&title='+encodeURIComponent(document.title)+
-      '&body='+encodeURIComponent(window.getSelection());
+      '&body='+encodeURIComponent(window.getSelection());void(0);
 #+end_example
 
 It is a bit more cluttered than the former one, but it is compatible
@@ -21393,7 +21401,7 @@ a bookmark with the following location:
 
 #+begin_example
 javascript:location.href='org-protocol://open-source?&url='+
-      encodeURIComponent(location.href)
+      encodeURIComponent(location.href);void(0)
 #+end_example
 
 #+vindex: org-protocol-project-alist
@@ -21685,7 +21693,8 @@ value as ~org-attach-method~ (~cp~ by default).]
 
 #+cindex: pasting files, images from clipboard
 Starting from Emacs 29, Org mode supports ~yank-media~ command to yank
-images from the clipboard and files from a file manager.
+images from the clipboard, files from a file manager and tables copied
+from LibreOffice Calc documents.
 
 #+vindex: org-yank-image-save-method
 When yanking images from clipboard, Org saves the image on disk and
@@ -21702,6 +21711,9 @@ When yanking files copied from a file manager, Org respects the value
 of ~org-yank-dnd-method~.  Image files pasted this way also respect
 the value of ~org-yank-image-save-method~ when the action to perform
 is =attach=.
+
+Tables copied from LibreOffice Calc documents are yanked as Org
+tables.
 
 ** Repeating commands
 :PROPERTIES:

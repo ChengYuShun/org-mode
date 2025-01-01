@@ -1106,7 +1106,7 @@ according to the value of `org-display-remote-inline-images'."
                                    ;; Number of pixels
                                    ;; must be a lone number, not
                                    ;; things like 4in
-                                   (seq (1+ (in "0-9")) eos)
+                                   (seq (1+ (in "0-9")) (? "px") eos)
                                    ;; Numbers ending with %
                                    (seq (1+ (in "0-9.")) (group-n 1 "%"))
                                    ;; Fractions
@@ -2136,6 +2136,16 @@ Previews are generated from the specs in
       (unless (overlay-buffer ov)
         (setq org-link-preview-overlays (delq ov org-link-preview-overlays))))))
 
+(defun org-link-frame-setup-function (link-type)
+  "Return the frame setup function for the link type LINK-TYPE.
+This signals an error if the value of the key LINK-TYPE in
+`org-link-frame-setup' is not a function."
+  (let ((fun (cdr (assq link-type org-link-frame-setup))))
+    (if (functionp fun)
+        fun
+      (error "The frame setup configuration `%S' for `%s' link type is ill-defined"
+             fun link-type))))
+
 
 ;;; Built-in link types
 
@@ -2171,9 +2181,7 @@ Equip each image with the keymap `image-map'.
 
 This is intended to be used as the `:preview' link property of
 file links, see `org-link-parameters'."
-  (if (not (display-graphic-p))
-      (prog1 nil
-        (message "Your Emacs does not support displaying images!"))
+  (when (display-graphic-p)
     (require 'image)
     (when-let* ((file-full (expand-file-name path))
                 (file (substitute-in-file-name file-full))

@@ -998,6 +998,39 @@ equivalent option for agenda views."
   :group 'org-todo
   :group 'org-archive)
 
+(defcustom org-edit-keep-region
+  '((org-metaleft . t)
+    (org-metaright . t)
+    (org-metaup . t)
+    (org-metadown . t))
+  "Shall some Org editing commands keep region active?
+
+This variable can be nil, t, or an a list of entries like
+  (COMMAND-NAME . KEEP-REGION-P)"
+  :type '(choice
+          (const :tag "Keep region for all commands" t)
+          (const :tag "Never keep region" nil)
+          (alist
+           :key-type
+           (choice (const org-metaleft)
+                   (const org-metaright)
+                   (const org-metaup)
+                   (const org-metadown))
+           :value-type
+           (choice (const :tag "Keep region" t)
+                   (const :tag "Deactivate region" nil))))
+  :package-version '(Org . "9.8")
+  :group 'org-edit-structure)
+
+(defun org--deactivate-mark ()
+  "Return non-nil when `this-command' should deactivate mark upon completion.
+Honor `org-edit-keep-region'.  Return nil by default, when
+`this-command' has no setting in `org-edit-keep-region'."
+  (pcase org-edit-keep-region
+    (`t nil)
+    (`nil t)
+    (_ (not (alist-get this-command org-edit-keep-region nil)))))
+
 (defgroup org-startup nil
   "Startup options Org uses when first visiting a file."
   :tag "Org Startup"
@@ -2959,10 +2992,13 @@ is better to limit inheritance to certain tags using the variables
 	  (const :tag "List them, indented with leading dots" indented)))
 
 (defcustom org-tags-sort-function nil
-  "When set, tags are sorted using this function as a comparator."
+  "When set, tags are sorted using this function as a comparator.
+When the value is nil, use default sorting order.  The default sorting
+is alphabetical, except in `org-set-tags' where no sorting is done by
+default."
   :group 'org-tags
   :type '(choice
-	  (const :tag "No sorting" nil)
+	  (const :tag "Default sorting" nil)
 	  (const :tag "Alphabetical" org-string<)
 	  (const :tag "Reverse alphabetical" org-string>)
 	  (function :tag "Custom function" nil)))
@@ -6766,8 +6802,9 @@ headings in the region."
   (interactive)
   (save-excursion
     (if (org-region-active-p)
-        (let ((deactivate-mark nil))
-          (org-map-region 'org-promote (region-beginning) (region-end)))
+        (progn
+          (org-map-region 'org-promote (region-beginning) (region-end))
+          (setq deactivate-mark (org--deactivate-mark)))
       (org-promote)))
   (org-fix-position-after-promote))
 
@@ -6778,8 +6815,9 @@ headings in the region."
   (interactive)
   (save-excursion
     (if (org-region-active-p)
-        (let ((deactivate-mark nil))
-          (org-map-region 'org-demote (region-beginning) (region-end)))
+        (progn
+          (org-map-region 'org-demote (region-beginning) (region-end))
+          (setq deactivate-mark (org--deactivate-mark)))
       (org-demote)))
   (org-fix-position-after-promote))
 
@@ -8531,7 +8569,7 @@ If the file does not exist, throw an error."
 	(and (boundp 'org-wait) (numberp org-wait) (sit-for org-wait))))
      ((or (stringp cmd)
 	  (eq cmd 'emacs))
-      (funcall (cdr (assq 'file org-link-frame-setup)) file)
+      (funcall (org-link-frame-setup-function 'file) file)
       (widen)
       (cond (line (org-goto-line line)
 		  (when (derived-mode-p 'org-mode) (org-fold-reveal)))
@@ -8559,7 +8597,7 @@ If the file does not exist, throw an error."
       ;; `org-file-apps' with sexp instead of a function for `cmd'.
       (user-error "Please see Org News for version 9.0 about \
 `org-file-apps'--Error: Deprecated usage of %S" cmd))
-     (t (funcall (cdr (assq 'file org-link-frame-setup)) file)))
+     (t (funcall (org-link-frame-setup-function 'file) file)))
     (funcall save-position-maybe)))
 
 ;;;###autoload
@@ -9288,6 +9326,7 @@ If an element cannot be made unique, an error is raised."
 	    (cl-sort menu-keys #'<
 		     :key (lambda (elm) (cl-position (cdr elm) keys))))))
 
+(defalias 'org-insert-block-template #'org-insert-structure-template)
 (defun org-insert-structure-template (type)
   "Insert a block structure of the type #+begin_foo/#+end_foo.
 Select a block from `org-structure-template-alist' then type
@@ -17353,8 +17392,8 @@ function runs `org-metaup-final-hook' using the same logic."
             (user-error "Cannot move past superior level or buffer limit"))
           ;; Drag first subtree above below the selected.
           (while (< (point) end)
-            (let ((deactivate-mark nil))
-              (call-interactively 'org-move-subtree-down)))))))
+            (call-interactively 'org-move-subtree-down)
+            (setq deactivate-mark (org--deactivate-mark)))))))
    ((org-region-active-p)
     (let* ((a (save-excursion
                 (goto-char (region-beginning))
@@ -17419,8 +17458,8 @@ function runs `org-metadown-final-hook' using the same logic."
             (user-error "Cannot move past superior level or buffer limit"))
           ;; Drag first subtree below above the selected.
           (while (> (point) beg)
-            (let ((deactivate-mark nil))
-              (call-interactively 'org-move-subtree-up)))))))
+            (call-interactively 'org-move-subtree-up)
+            (setq deactivate-mark (org--deactivate-mark)))))))
    ((org-region-active-p)
     (let* ((a (save-excursion
                 (goto-char (region-beginning))
@@ -20466,7 +20505,9 @@ it has a `diary' type."
     ;; Looks like different DEs go for different handler names,
     ;; https://larsee.com/blog/2019/05/clipboard-files/.
     (yank-media-handler "x/special-\\(?:gnome\\|KDE\\|mate\\)-files"
-                        #'org--copied-files-yank-media-handler))
+                        #'org--copied-files-yank-media-handler)
+    (yank-media-handler "application/x-libreoffice-tsvc"
+                        #'org--libreoffice-table-handler))
   (when (boundp 'x-dnd-direct-save-function)
     (setq-local x-dnd-direct-save-function #'org--dnd-xds-function)))
 
@@ -20558,6 +20599,29 @@ concerned files."
       (if (file-readable-p f)
           (org--dnd-local-file-handler f action sep)
         (message "File `%s' is not readable, skipping" f)))))
+
+(defun org--libreoffice-table-handler (_mimetype data)
+  "Insert LibreOffice Calc table DATA as an Org table.
+DATA is in the TSV format."
+  ;; Some LibreOffice versions have the null byte in the selection.
+  ;; It should be safe to remove it.
+  (when (string-search "\0" data)
+    (setq data (string-replace "\0" "" data)))
+  (let ((orig-buf (current-buffer)))
+    (with-temp-buffer
+      (decode-coding-string data 'undecided nil (current-buffer))
+      (let ((tmp (current-buffer))
+            (nlines (count-lines (point-min) (point-max))))
+        (when (> nlines org-table-convert-region-max-lines)
+          (unless (yes-or-no-p
+                   (format "Inserting large table with %d lines, more than `org-table-convert-region-max-lines'.  Continue? "
+                           nlines))
+            (user-error "Table is larger than limit `org-table-convert-region-max-lines'")))
+        ;; User has chosen to ignore the limit.
+        (let ((org-table-convert-region-max-lines most-positive-fixnum))
+          (org-table-convert-region (point-min) (point-max)))
+        (with-current-buffer orig-buf
+          (insert-buffer-substring tmp))))))
 
 (defcustom org-yank-dnd-method 'ask
   "Action to perform on the dropped and the pasted files.

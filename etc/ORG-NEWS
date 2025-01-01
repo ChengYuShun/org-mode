@@ -18,6 +18,23 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 # require user action for most Org mode users.
 # Sorted from most important to least important.
 
+*** You may need to update =org-protocol= bookmarklets for browsers
+
+In Firefox-133, and Firefox-128.5 ESR the previously suggested
+javascript bookmarklets replace current page with bookmarklet URL
+text.  We have updated the manual with new bookmarklets that do not
+have such problem.
+
+The new bookmarklets have ~void(0);~ appended at the end, so that they
+do not return anything.
+
+Example:
+
+#+begin_example
+javascript:location.href='org-protocol://store-link?url='+
+      encodeURIComponent(location.href);void(0);
+#+end_example
+
 *** =C-c C-x C-v= command toggling inline image display has been reworked
 
 Previously, =C-c C-x C-v= always toggled image display in the whole
@@ -83,6 +100,25 @@ This should have minimal impact on non-iCalendar exporters, since
 users who manually set ~org-export-with-timestamps~ to ~active~ will
 now have diary timestamps included as well.
 
+*** =ob-calc.el=: Vector and matrix are now inserted as Org tables by default
+
+~ob-calc~ now formats vector and matrix results as Org tables.  This
+conservation can be overriden using the ~:results verbatim~ keyword on
+a per source block basis.
+
+To get back the old behaviour, add
+
+#+BEGIN_SRC emacs-lisp
+(with-eval-after-load 'ob-calc
+  (setq org-babel-header-args:calc
+        (append '(:results . "verbatim") org-babel-header-args:calc)))
+#+END_SRC
+
+to your configuration.
+
+The new behaviour follows general babel backend rules (auto-detecting
+result type), but may affect the existing usage.
+
 ** New features
 
 # We list the most important features, and the features that may
@@ -136,11 +172,37 @@ The keybindings in the repeat-maps can be changed by customizing
 
 See the new [[info:org#Repeating commands]["Repeating commands"]] section in Org mode manual.
 
+*** Tables copied from LibreOffice Calc documents can be pasted as Org tables
+
+Tables copied into the clipboard from LibreOffice Calc documents can
+now be pasted as an Org table using ~yank-media~.
+
 ** New and changed options
 
-# Chanes deadling with changing default values of customizations,
+# Changes dealing with changing default values of customizations,
 # adding new customizations, or changing the interpretation of the
 # existing customizations.
+
+*** ox-odt: New export option ~org-odt-with-forbidden-chars~
+
+The new export option controls how to deal with characters that are forbidden
+inside ODT documents during export.
+
+The ODT documents must follow XML1.0 specification and cannot contain
+certain unicode characters.  For example, form feed characters like ^L
+are disallowed.
+
+By default, =ox-odt= will strip such characters and display warning.
+You may return to the previous behaviour by setting
+~org-odt-with-forbidden-chars~ to t.
+
+Note that Emacs warnings can always be suppressed by clicking on ⛔
+symbol or by customizing ~warning-suppress-types~.
+
+*** New option ~org-edit-keep-region~
+
+Since Org 9.7, structure editing commands do not deactivate region
+after editing.  Now, this is configurable via the new option.
 
 *** New option ~org-link-preview-batch-size~
 
@@ -190,6 +252,20 @@ limited to entries having a =langid= field specifying a variant of
 English.  The default value is ~t~ as the CSL standard assumes that
 English titles are specified in sentence-case but the bibtex
 bibliography format requires them to be written in title-case.
+
+*** New environment =onlyenv= in ~org-beamer-environments-default~
+
+The =onlyenv= environment limits showing parts of an animated Beamer
+slide to specific animation steps.
+
+#+BEGIN_SRC org
+,***** Comment
+:PROPERTIES:
+:BEAMER_env: onlyenv
+:BEAMER_act: <2->
+:END:
+This text will be displayed on animation step 2 and later.
+#+END_SRC
 
 ** New functions and changes in function arguments
 
@@ -354,6 +430,12 @@ the "default" directory - where the symlink is located.
 The Texinfo exporter no longer removes links from headings.  This
 applies to all headings, below and above the =H= and =toc= export
 =#+OPTIONS:=.
+
+*** Texinfo exporter now considers numeric =toc= values in =#+OPTIONS:=
+
+For example, given =H:3= and =toc:2= in =#+OPTIONS:=, all headings at
+the 1st and 2nd level appear in the table of contents and those at the
+3rd level do not.
 
 * Version 9.7
 
