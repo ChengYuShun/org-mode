@@ -246,7 +246,9 @@ specially in `org-element--object-lex'.")
 		"-\\{5,\\}[ \t]*$" "\\|"
 		;; LaTeX environments.  This is modified because it
 		;; breaks environments inside "\[" and "\]".
-		"\\\\begin{\\(align\\*?\\)}" "\\|"
+		"\\\\begin{\\("
+                (org-latex-environment-keywords-regex)
+                "\\)}" "\\|"
 		;; Clock lines.
 		org-element-clock-line-re "\\|"
 		;; Lists.
@@ -2759,14 +2761,18 @@ properties."
 ;;;; LaTeX Environment
 
 (defconst org-element--latex-begin-environment
-  "^[ \t]*\\\\begin{\\(align\\*?\\)}"
+  (concat "^[ \t]*\\\\begin{\\("
+          (org-latex-environment-keywords-regex)
+          "\\)}")
   "Regexp matching the beginning of a LaTeX environment.
 The environment is captured by the first group.
 
 See also `org-element--latex-end-environment'.")
 
 (defconst org-element--latex-begin-environment-nogroup
-  "^[ \t]*\\\\begin{align\\*?}"
+  (concat "^[ \t]*\\\\begin{"
+          (org-latex-environment-keywords-regex)
+          "}")
   "Regexp matching the beginning of a LaTeX environment.")
 
 (defconst org-element--latex-end-environment
@@ -7132,7 +7138,9 @@ If you observe Emacs hangs frequently, please report this to Org mode mailing li
 (defconst org-element--cache-sensitive-re
   (concat
    "^\\*+ " "\\|"
-   "\\\\end{align\\*?}[ \t]*$" "\\|"
+   "\\\\end{"
+   (org-latex-environment-keywords-regex)
+   "}[ \t]*$" "\\|"
    "^[ \t]*\\(?:"
    "#\\+END\\(?:_\\|:?[ \t]*$\\)" "\\|"
    org-list-full-item-re "\\|"

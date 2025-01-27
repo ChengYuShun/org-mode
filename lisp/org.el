@@ -16137,7 +16137,14 @@ environment remains unintended."
     (set-marker end nil)))
 
 
-;;;; LaTeX fragments
+;;;; LaTeX fragments and environments
+
+(defvar org-latex-environment-keywords
+  '("align" "align*" "equation" "equation*")
+  "A list of LaTeX environment keywords.")
+
+(defun org-latex-environment-keywords-regex ()
+  (eval `(rx (or ,@org-latex-environment-keywords))))
 
 (defun org-inside-LaTeX-fragment-p (&optional element)
   "Test if point is inside a LaTeX fragment or environment.
@@ -16288,7 +16295,10 @@ PROCESSING-TYPE is the conversion method to use, as a symbol.
 Some of the options can be changed using the variable
 `org-format-latex-options', which see."
   (unless (eq processing-type 'verbatim)
-    (let* ((math-regexp "\\$\\|\\\\[([]\\|^[ \t]*\\\\begin{align\\*?}")
+    (let* ((math-regexp (concat
+                         "\\$\\|\\\\[([]\\|^[ \t]*\\\\begin{"
+                         (org-latex-environment-keywords-regex)
+                         "}"))
 	   (cnt 0)
 	   checkdir-flag)
       (goto-char (or beg (point-min)))
