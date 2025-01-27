@@ -16194,6 +16194,12 @@ overlays were removed, nil otherwise."
     (mapc #'delete-overlay overlays)
     overlays))
 
+(defun org-delete-latex-preview (&optional beg end)
+  (let ((overlays (org-clear-latex-preview beg end)))
+    (dolist (overlay overlays)
+      (delete-file
+       (plist-get (cdr (overlay-get overlay 'display)) :file)))))
+
 (defun org--latex-preview-region (beg end)
   "Preview LaTeX fragments between BEG and END.
 BEG and END are buffer positions."
