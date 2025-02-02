@@ -1,6 +1,6 @@
 ;;; org-lint.el --- Linting for Org documents        -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2015-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2015-2025 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -728,6 +728,10 @@ Use :header-args: instead"
 	(pcase type
 	  ((or "attachment" "file")
 	   (let* ((path (org-element-property :path l))
+                  (path (if (and (equal type "attachment")
+                                 (string-match "::\\(.*\\)\\'" path))
+		            (substring path 0 (match-beginning 0))
+                          path))
 		  (file (if (string= type "file")
 			    path
                           (org-with-point-at (org-element-begin l)
@@ -882,6 +886,8 @@ Use \"export %s\" instead"
     reports))
 
 (defun org-lint-invalid-macro-argument-and-template (ast)
+  "Check for invalid macro arguments in AST."
+  (require 'ox)
   (let* ((reports nil)
          (extract-placeholders
 	  (lambda (template)
@@ -944,7 +950,7 @@ Use \"export %s\" instead"
 				    name))
 		      reports))))))))
     ;; Check arguments for macros.
-    (org-macro-initialize-templates)
+    (org-macro-initialize-templates org-export-global-macros)
     (let ((templates (append
 		      (mapcar (lambda (m) (cons m "$1"))
 			      '("author" "date" "email" "title" "results"))

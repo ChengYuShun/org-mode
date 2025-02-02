@@ -628,6 +628,10 @@ another block
 \"H1: :tangle ~/../../tmp/absolute.el\"
 #+end_src
 
+#+begin_src
+\"H1: no language and inherited :tangle relative.el in properties\"
+#+end_src
+
 * H2 without :tangle in properties
 
 #+begin_src emacs-lisp
@@ -660,6 +664,10 @@ another block
 
 #+begin_src emacs-lisp :tangle ~/../../tmp/absolute.el
 \"H2: :tangle ~/../../tmp/absolute.el\"
+#+end_src
+
+#+begin_src
+\"H2: without language and thus without :tangle\"
 #+end_src"
                     `((?a . ,el-file-abs)
                       (?r . ,el-file-rel))))
@@ -684,7 +692,7 @@ another block
                                               collected-blocks)))))
         (should (equal (funcall normalize-expected-targets-alist
                                 `(("/tmp/absolute.el" . 4)
-                                  ("relative.el" . 5)
+                                  ("relative.el" . 6)
                                   ;; file name differs between tests
                                   (,el-file-abs . 4)))
                        (funcall count-blocks-in-target-files
@@ -699,13 +707,39 @@ another block
           (should (equal
                    (funcall normalize-expected-targets-alist
                             `(("/tmp/absolute.el" . 4)
-                              ("relative.el" . 5)
+                              ("relative.el" . 6)
                               ;; Default :tangle header now also
                               ;; points to the file name derived from the name of
-                              ;; the Org file, so 5 blocks should go there.
-                              (,el-file-abs . 5)))
+                              ;; the Org file, so 6 blocks should go there.
+                              (,el-file-abs . 6)))
                    (funcall count-blocks-in-target-files
                             (org-babel-tangle-collect-blocks)))))))))
+
+(ert-deftest ob-tangle/bibtex ()
+  "Tangle BibTeX into a `.bib' file."
+  (let ((file (make-temp-file "org-tangle-" nil ".org"))
+        (bib "@Misc{example,
+  author = {Richard Stallman and {contributors}},
+  title = {{GNU} {Emacs}},
+  publisher = {Free Software Foundation},
+  url = {https://www.emacs.org/},
+}"))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect file)
+          (insert (format "#+begin_src bibtex :tangle yes
+%s
+#+end_src"
+                          bib))
+          (org-babel-tangle)
+          (let ((bib-file
+                 (if (fboundp 'file-name-with-extension)
+                     (file-name-with-extension file "bib")
+                   ;; Emacs <28
+                   (concat (file-name-sans-extension file) "." "bib"))))
+            (should (file-exists-p bib-file))
+            (should (string= (string-trim (org-file-contents bib-file))
+                             bib))))
+      (delete-file file))))
 
 (provide 'test-ob-tangle)
 

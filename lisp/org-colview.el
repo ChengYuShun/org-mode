@@ -1,6 +1,6 @@
 ;;; org-colview.el --- Column View in Org            -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2004-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -1203,7 +1203,7 @@ This function updates `org-columns-current-fmt-compiled'."
                 (optional "(" (group (zero-or-more (not (any ")")))) ")")
                 (optional "{" (group (zero-or-more (not (any "}")))) "}")
                 (zero-or-more space))
-    	    fmt start)
+            fmt start)
       (setq start (match-end 0))
       (let* ((width (and (match-end 1) (string-to-number (match-string 1 fmt))))
 	     (prop (match-string-no-properties 2 fmt))

@@ -6,7 +6,7 @@ ORG NEWS -- history of user-visible changes.   -*- mode: org; coding: utf-8 -*-
 #+LINK: msg https://list.orgmode.org/%s/
 #+LINK: git https://git.savannah.gnu.org/cgit/emacs/org-mode.git/commit/?id=%s
 
-Copyright (C) 2012-2024 Free Software Foundation, Inc.
+Copyright (C) 2012-2025 Free Software Foundation, Inc.
 See the end of the file for license conditions.
 
 Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
@@ -100,6 +100,10 @@ This should have minimal impact on non-iCalendar exporters, since
 users who manually set ~org-export-with-timestamps~ to ~active~ will
 now have diary timestamps included as well.
 
+To use the old behavior and export active timestamps only without
+diary timestamps, users can set ~org-export-with-timestamps~ and
+~org-icalendar-with-timestamps~ to ~active-exclude-diary~.
+
 *** =ob-calc.el=: Vector and matrix are now inserted as Org tables by default
 
 ~ob-calc~ now formats vector and matrix results as Org tables.  This
@@ -176,6 +180,30 @@ See the new [[info:org#Repeating commands]["Repeating commands"]] section in Org
 
 Tables copied into the clipboard from LibreOffice Calc documents can
 now be pasted as an Org table using ~yank-media~.
+
+*** New datetree capture ~:tree-type~ options
+:PROPERTIES:
+:CUSTOM_ID: 9.8-datetree-treetype
+:END:
+
+For datetree capture, ~:tree-type~ can now be any subset of ~(year
+quarter month week day)~ to construct a datetree with the specified
+levels.  For back-compatibility, the default value of ~nil~ is an
+alias for ~(year month day)~, ~month~ is an alias for ~(year month)~,
+and ~week~ is an alias for ~(year week day)~.
+
+If ~:tree-type~ is a superset of ~(month week)~, then weeks are
+assigned to the month containing Thursday, to be consistent with the
+ISO-8601 year-week rule.  If ~:tree-type~ contains ~(quarter week)~
+but does not contain ~month~, then quarters are defined as 13-week
+periods (the final quarter of a 53-week year has 14-weeks).
+Otherwise, quarters are defined as 3-month periods.
+
+Additionally, ~:tree-type~ can be a function, in which case it should
+take the date as an argument, and generate a list of pairs for
+~org-datetree-find-create-hierarchy~.  This allows for creating new
+types of datetrees (e.g. for lunar calendars, academic calendars,
+retail 4-4-5 calendars, etc).
 
 ** New and changed options
 
@@ -333,6 +361,25 @@ leave extra prompts after evaluation, and skipping the prompt
 filtering can be more robust for such languages (as this avoids
 removing false positive prompts).
 
+*** Elisp functions for new datetree tree-types
+
+Accompanying the [[#9.8-datetree-treetype][new datetree capture ~:tree-type~ options]], on the
+elisp level ~org-datetree-find-create-entry~ and
+~org-datetree-find-create-hierarchy~ generalize
+~org-datetree-find-date-create~, ~org-datetree-find-month-create~, and
+~org-datetree-find-iso-week-create~ to new datetree types.
+
+*** ~org-element-create~ now ignores ~nil~s in CHILDREN argument
+
+When CHILDREN contains ~nil~ elements, they are skipped.  This way,
+
+#+begin_src emacs-lisp
+(let ((children nil))
+  (org-element-create 'section nil children)) ; => (section nil)
+#+end_src
+
+will yield expected results rather than assigning literal ~nil~ as a child.
+
 ** Removed or renamed functions and variables
 
 *** ~org-cycle-display-inline-images~ is renamed to ~org-cycle-display-link-previews~
@@ -351,7 +398,35 @@ previews of supported link types besides image links.
 The behavior is unchanged, except in that the new variable now affects
 previews of supported link types besides image links.
 
+*** Obsolete functions and variables removed from ~org-datetree~
+
+Due to the refactoring of ~org-datetree~ to support the [[#9.8-datetree-treetype][new datetree
+capture ~:tree-type~ options]], the internal variable
+~org-datetree-base-level~ has been removed, as well as the
+undocumented helper function ~org-datetree-insert-line~.
+
 ** Miscellaneous
+*** ox-man: Support specifying =#+DATE:= and ~org-export-with-date~
+
+Previously, ox-man ignored =#+DATE:= keyword even when
+~org-export-with-date~ is set to non-nil.  Now, the date is exported
+and specified in the =footer-middle= argument of =.TH= macro (see ~man
+7 man~).
+
+*** ~org-timer-done-hook~ is now run before the timer is stopped
+
+Previously, ~org-timer-countdown-timer~ and ~org-timer-start-time~
+were unset when the hook is run.  Now, they still hold the timer info.
+
+*** ox-latex: LaTeX images are now stored alongside the exported =.html= file
+
+Previously, LaTeX images (when HTML export does use images for LaTeX)
+were stored alongside the original =.org= file.  Now, they are stored
+alongside the =.html= file.
+
+This change will make links to LaTeX images point to the folder
+containing =.html= file, not the =.org= file.
+
 *** Org mode no longer prevents =flyspell= from spell-checking inside =LOGBOOK= drawers
 
 Previously, spell-checking via =flyspell= was disabled inside
@@ -436,6 +511,21 @@ applies to all headings, below and above the =H= and =toc= export
 For example, given =H:3= and =toc:2= in =#+OPTIONS:=, all headings at
 the 1st and 2nd level appear in the table of contents and those at the
 3rd level do not.
+
+*** =ob-tangle= now tangles source blocks that do not specify a =language= if an inherited property sets a tangle filename
+
+Previously, all source blocks that did not specify a =language= where
+ignored by ~org-babel-tangle-collect-blocks~. Now, if it inherits a
+:tangle header argument with a value other than =no= or =yes= (that is, a
+filename), a source block without =language= will get tangled to that
+file.
+
+*** BibTeX is tangled with the standard =.bib= file extension
+
+Previously, =bibtex= source blocks located in a file named =NAME.org=
+were tangled into a file named =NAME.bibtex=.  Now, they are tangled
+into a file named =FILE.bib=, using the standard extension =.bib=,
+matching the rest of the ecosystem, including BibTeX and LaTeX.
 
 * Version 9.7
 

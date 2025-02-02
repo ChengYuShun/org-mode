@@ -1,6 +1,6 @@
 ;;; org-agenda.el --- Dynamic task and appointment lists for Org  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2004-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -8789,7 +8789,7 @@ See also:
 	   (list (car args) sd span)))
       (org-agenda-redo)
       (org-agenda-find-same-or-today-or-agenda cnt))
-    (set-window-start nil wstart)))
+    (set-window-start nil wstart 'noforce)))
 
 (defun org-agenda-earlier (arg)
   "Go backward in time by the current span in the agenda buffer.

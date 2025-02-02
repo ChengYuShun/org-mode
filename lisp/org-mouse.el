@@ -1,6 +1,6 @@
 ;;; org-mouse.el --- Better mouse support for Org -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2006-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2006-2025 Free Software Foundation, Inc.
 
 ;; Author: Piotr Zielinski <piotr dot zielinski at gmail dot com>
 ;; Maintainer: Carsten Dominik <carsten.dominik@gmail.com>
@@ -887,7 +887,7 @@ This means, between the beginning of line and the point."
             (when (memq 'activate-stars org-mouse-features)
               (font-lock-add-keywords
                nil
-               `((,org-outline-regexp
+               `((,org-outline-regexp-bol
                   0 `(face org-link mouse-face highlight keymap ,org-mouse-map)
                   'prepend))
                t))
