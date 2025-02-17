@@ -3279,7 +3279,8 @@ A nil value means to remove them, after a query, from the list."
 (defcustom org-format-latex-options
   '(:foreground default :background default :scale 1.0
 		:html-foreground "Black" :html-background "Transparent"
-		:html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+		:html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")
+                :justify center)
   "Options for creating images from LaTeX fragments.
 This is a property list with the following properties:
 :foreground  the foreground color for images embedded in Emacs, e.g. \"Black\".
@@ -3298,7 +3299,8 @@ This is a property list with the following properties:
              \"$\"     find math expressions surrounded by $...$
              \"$$\"    find math expressions surrounded by $$....$$
              \"\\(\"    find math expressions surrounded by \\(...\\)
-             \"\\=\\[\"    find math expressions surrounded by \\=\\[...\\]"
+             \"\\=\\[\"    find math expressions surrounded by \\=\\[...\\]
+:justify     if set to 'center', will place block formulas at the center."
   :group 'org-latex
   :type 'plist)
 
@@ -16161,14 +16163,16 @@ at point."
     (org-in-regexp
      "\\\\[a-zA-Z]+\\*?\\(\\(\\[[^][\n{}]*\\]\\)\\|\\({[^{}\n]*}\\)\\)*")))
 
-(defun org--make-preview-overlay (beg end image &optional imagetype scale)
+(defun org--make-preview-overlay (beg end image &optional imagetype scale block-p)
   "Build an overlay between BEG and END using IMAGE file.
 
 Argument IMAGETYPE is the extension of the displayed image,
 as a string.  It defaults to \"png\".
 
 SCALE is the scaling factor that will be applied to the image,
-which defaults to 1.0."
+which defaults to 1.0.
+
+BLOCK-P can be either 'environment', 'fragment' or nil."
   (let ((ov (make-overlay beg end))
 	(imagetype (or (intern imagetype) 'png)))
     (overlay-put ov 'org-overlay-type 'org-latex-overlay)
@@ -16180,7 +16184,29 @@ which defaults to 1.0."
     (overlay-put ov
                  'display
                  `(image :type ,imagetype :file ,image :ascent center
-                         :scale ,(or scale 1.0)))))
+                         :scale ,(or scale 1.0)
+                         :margin ,(if block-p '(0 . 3) '(0 . 0))))
+    ;; place the formula at the center if required
+    (when (and block-p
+               (eq 'center (plist-get org-format-latex-options :justify)))
+      (let* ((img (create-image image nil nil :scale scale))
+             (img-width (car (image-size img)))
+             (indentation (current-indentation))
+             (offset))
+        (setq offset (- (window-text-width)
+                        img-width
+                        indentation))
+        (when org-indent-mode
+          (setq offset (- offset (* 2 (or (org-current-level) 0)))))
+        (setq offset (/ offset 2))
+        ;; For whatever reason, LaTeX fragments are placed differently
+        ;; compared to LaTeX environments, so we have to manually add
+        ;; extra indentation spaces for LaTeX environment.
+        (when (eq block-p 'environment)
+          (setq offset (+ offset indentation)))
+        (setq offset (max (floor offset) 0))
+        (overlay-put ov 'before-string
+                     (make-string offset ? ))))))
 
 (defun org-clear-latex-preview (&optional beg end)
   "Remove all overlays with LaTeX fragment images in current buffer.
@@ -16395,7 +16421,12 @@ Some of the options can be changed using the variable
 		    (unless (file-exists-p movefile)
 		      (org-create-formula-image
 		       value movefile options forbuffer processing-type))
-                    (org-place-formula-image link block-type beg end value overlays movefile imagetype)))
+                    (org-place-formula-image
+                     link block-type beg end value overlays movefile imagetype nil
+                     (cond ((equal (car context) 'latex-environment) 'environment)
+                           ((member (substring value 0 2) '("\\[" "$$"))
+                            'fragment)
+                           (t nil)))))
 		 ((eq processing-type 'mathml)
 		  ;; Process to MathML.
 		  (unless (org-format-latex-mathml-available-p)
@@ -16411,12 +16442,16 @@ Some of the options can be changed using the variable
 			 processing-type)))))))))))
 
 (defun org-place-formula-image (link block-type beg end value overlays
-				movefile imagetype &optional scale)
+				movefile imagetype
+                                &optional scale block-p)
   "Place an overlay from BEG to END showing MOVEFILE.
 
 The overlay will be above BEG if OVERLAYS is non-nil.
 
-SCALE is the scaling factor that will be applied to the image."
+SCALE is the scaling factor that will be applied to the image.
+
+BLOCK-P can be either 'environment', 'fragment' or nil.  nil
+means this is not supposed to be centered."
   (if overlays
       (let ((scale (org--get-image-scale movefile nil scale
 					 imagetype)))
@@ -16424,7 +16459,7 @@ SCALE is the scaling factor that will be applied to the image."
           (when (eq (overlay-get o 'org-overlay-type)
                     'org-latex-overlay)
             (delete-overlay o)))
-        (org--make-preview-overlay beg end movefile imagetype scale)
+        (org--make-preview-overlay beg end movefile imagetype scale block-p)
         (goto-char end))
     (delete-region beg end)
     (insert
