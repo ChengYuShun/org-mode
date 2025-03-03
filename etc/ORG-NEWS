@@ -18,6 +18,16 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 # require user action for most Org mode users.
 # Sorted from most important to least important.
 
+*** ~org-store-link~ no longer asks to select store function when called noninteractively
+
+Previously, when multiple store functions are available to store link
+at point, ~org-store-link~ would aslways ask user which store function
+to use.
+
+Now, when ~org-store-link~ is called noninteractively (~interactive?~
+argument is nil), the first matching store function is used.
+Interactively, the previous behaviour is retained.
+
 *** You may need to update =org-protocol= bookmarklets for browsers
 
 In Firefox-133, and Firefox-128.5 ESR the previously suggested
@@ -295,6 +305,21 @@ slide to specific animation steps.
 This text will be displayed on animation step 2 and later.
 #+END_SRC
 
+*** ox-latex: Table of contents generation has been fixed and augmented
+
+The LaTeX exporter differs from other exporters in that it *does not*
+export unnumbered sections by default.
+
+The LaTeX exporter will use the new property value =:UNNUMBERED: toc= to
+include unnumbered sections in the table of contents.
+
+Additionally, a new custom variable
+~org-latex-toc-include-unnumbered~ has been introduced. It
+enables including unnumbered sections in the ToC aligned with the
+behaviour of other exporters. In this case, to exclude a section from
+the table of contents, mark it as =:UNNUMBERED: notoc= in its
+properties.
+
 ** New functions and changes in function arguments
 
 # This also includes changes in function behavior from Elisp perspective.
@@ -406,6 +431,11 @@ capture ~:tree-type~ options]], the internal variable
 undocumented helper function ~org-datetree-insert-line~.
 
 ** Miscellaneous
+*** ~yank-media~ and DND handlers now honor the user option ~org-file-link-type~
+
+When inserting file: links, ~yank-media~ and DND handlers now respect
+the user option ~org-file-link-type~.
+
 *** ox-man: Support specifying =#+DATE:= and ~org-export-with-date~
 
 Previously, ox-man ignored =#+DATE:= keyword even when
@@ -526,6 +556,15 @@ Previously, =bibtex= source blocks located in a file named =NAME.org=
 were tangled into a file named =NAME.bibtex=.  Now, they are tangled
 into a file named =FILE.bib=, using the standard extension =.bib=,
 matching the rest of the ecosystem, including BibTeX and LaTeX.
+
+*** LaTeX export now respects ~org-latex-with...~ options in the PDF matedata
+
+Previously, the LaTeX exporter handled the PDF metadata =pdfcreator=,
+=pdfauthor= and =pdftitle= as defined in
+~org-latex-hyperref-template~. This has changed and these three fields
+will be defined as empty and not produce any metadata if their
+corresponding ~org-latex-with-author~, ~org-latex-with-title~, or
+~org-latex-with-creator~ option is set to ~nil~.
 
 * Version 9.7
 

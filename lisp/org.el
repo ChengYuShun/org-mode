@@ -8657,7 +8657,7 @@ When point is a footnote definition, move to the first reference
 found.  If it is on a reference, move to the associated
 definition.
 
-When point is on a src-block of inline src-block, open its result.
+When point is on a src-block or inline src-block, open its result.
 
 When point is on a citation, follow it.
 
@@ -14683,12 +14683,11 @@ The command returns the inserted time stamp."
   (setq org-display-custom-times (not org-display-custom-times))
   (unless org-display-custom-times
     (let ((p (point-min)) (bmp (buffer-modified-p)))
-      (while (setq p (next-single-property-change p 'display))
-	(when (and (get-text-property p 'display)
-		   (eq (get-text-property p 'face) 'org-date))
+      (while (setq p (next-single-property-change p 'org-custom-date))
+	(when (get-text-property p 'org-custom-date)
 	  (remove-text-properties
-	   p (setq p (next-single-property-change p 'display))
-	   '(display t))))
+	   p (setq p (next-single-property-change p 'org-custom-date))
+	   '(display t org-custom-date t))))
       (set-buffer-modified-p bmp)))
   (org-restart-font-lock)
   (setq org-table-may-need-update t)
@@ -14711,7 +14710,8 @@ The command returns the inserted time stamp."
 	  str (org-add-props
 		  (format-time-string tf (org-encode-time time))
 		  nil 'mouse-face 'highlight))
-    (put-text-property beg end 'display str)))
+    (put-text-property beg end 'display str)
+    (put-text-property beg end 'org-custom-date t)))
 
 (defun org-fix-decoded-time (time)
   "Set 0 instead of nil for the first 6 elements of time.
@@ -18321,17 +18321,22 @@ object (e.g., within a comment).  In these case, you need to use
      ;; if `org-return-follows-link' allows it.  Tolerate fuzzy
      ;; locations, e.g., in a comment, as `org-open-at-point'.
      ((and org-return-follows-link
-	   (or (and (eq 'link element-type)
-		    ;; Ensure point is not on the white spaces after
-		    ;; the link.
-		    (let ((origin (point)))
-		      (org-with-point-at (org-element-end context)
-			(skip-chars-backward " \t")
-			(> (point) origin))))
-	       (org-in-regexp org-ts-regexp-both nil t)
-	       (org-in-regexp org-tsr-regexp-both nil  t)
-               (org-element-lineage context '(citation citation-reference) 'include-self)
-	       (org-in-regexp org-link-any-re nil t)))
+	   (or
+            (let ((context
+                   (org-element-lineage
+                    context
+                    '(citation citation-reference link)
+                    'include-self)))
+              (and context
+                   ;; Ensure point is not on the white spaces after
+                   ;; the link.
+                   (let ((origin (point)))
+                     (org-with-point-at (org-element-end context)
+                       (skip-chars-backward " \t")
+                       (> (point) origin)))))
+            (org-in-regexp org-ts-regexp-both nil t)
+            (org-in-regexp org-tsr-regexp-both nil  t)
+            (org-in-regexp org-link-any-re nil t)))
       (call-interactively #'org-open-at-point))
      ;; Insert newline in heading, but preserve tags.
      ((and (not (bolp))
@@ -20613,8 +20618,7 @@ end."
                    filename
                    (if (eq org-yank-image-save-method 'attach)
                        temporary-file-directory
-                     org-yank-image-save-method)))
-         link)
+                     org-yank-image-save-method))))
     (when (and (not (eq org-yank-image-save-method 'attach))
                (not (file-directory-p org-yank-image-save-method)))
       (make-directory org-yank-image-save-method t))
@@ -20624,11 +20628,12 @@ end."
       (with-temp-file absname
         (insert data)))
     (if (null (eq org-yank-image-save-method 'attach))
-        (setq link (org-link-make-string (concat "file:" (file-relative-name absname))))
+        (insert (org-link-make-string
+                 (concat "file:"
+                         (org-link--normalize-filename absname))))
       (require 'org-attach)
       (org-attach-attach absname nil 'mv)
-      (setq link (org-link-make-string (concat "attachment:" filename))))
-    (insert link)))
+      (insert (org-link-make-string (concat "attachment:" filename))))))
 
 ;; I cannot find a spec for this but
 ;; https://indigo.re/posts/2021-12-21-clipboard-data.html and pcmanfm
@@ -20758,7 +20763,9 @@ in which case, space is inserted."
       (`open (dnd-open-local-file url action))
       (`file-link
        (let ((filename (dnd-get-local-file-name url)))
-         (insert (org-link-make-string (concat "file:" filename)) separator))))))
+         (insert (org-link-make-string
+                  (concat "file:" (org-link--normalize-filename filename)))
+                 separator))))))
 
 (defun org--dnd-attach-file (url action separator)
   "Attach filename given by URL using method pertaining to ACTION.
@@ -20806,8 +20813,9 @@ SEPARATOR is the string to insert after each link."
                   "file:"
                 "attachment:")
               (if separatep
-                  (expand-file-name (file-name-nondirectory filename)
-                                    org-yank-image-save-method)
+                  (org-link--normalize-filename
+                   (expand-file-name (file-name-nondirectory filename)
+                                     org-yank-image-save-method))
                 (file-name-nondirectory filename))))
      separator)
     'private))
@@ -20835,7 +20843,9 @@ When NEED-NAME is nil, the drop is complete."
     (pcase org--dnd-xds-method
       (`attach (insert (org-link-make-string
                         (concat "attachment:" (file-name-nondirectory filename)))))
-      (`file-link (insert (org-link-make-string (concat "file:" filename))))
+      (`file-link (insert (org-link-make-string
+                           (concat "file:"
+                                   (org-link--normalize-filename filename)))))
       (`open (find-file filename)))
     (setq-local org--dnd-xds-method nil)))
 

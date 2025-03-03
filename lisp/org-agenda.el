@@ -2829,7 +2829,7 @@ type."
   :version "24.4"
   :package-version '(Org . "8.0")
   :group 'org-agenda-custom-commands
-  :type '(choice (symbol :tag "No limit" nil)
+  :type '(choice (const :tag "No limit" nil)
 		 (integer :tag "Max number of entries")
 		 (repeat
 		  (cons (choice :tag "Agenda type"
@@ -2847,7 +2847,7 @@ type."
   :version "24.4"
   :package-version '(Org . "8.0")
   :group 'org-agenda-custom-commands
-  :type '(choice (symbol :tag "No limit" nil)
+  :type '(choice (const :tag "No limit" nil)
 		 (integer :tag "Max number of TODOs")
 		 (repeat
 		  (cons (choice :tag "Agenda type"
@@ -2865,7 +2865,7 @@ type."
   :version "24.4"
   :package-version '(Org . "8.0")
   :group 'org-agenda-custom-commands
-  :type '(choice (symbol :tag "No limit" nil)
+  :type '(choice (const :tag "No limit" nil)
 		 (integer :tag "Max number of tagged entries")
 		 (repeat
 		  (cons (choice :tag "Agenda type"
@@ -2883,7 +2883,7 @@ to limit entries to in this type."
   :version "24.4"
   :package-version '(Org . "8.0")
   :group 'org-agenda-custom-commands
-  :type '(choice (symbol :tag "No limit" nil)
+  :type '(choice (const :tag "No limit" nil)
 		 (integer :tag "Max number of minutes")
 		 (repeat
 		  (cons (choice :tag "Agenda type"
@@ -9258,8 +9258,12 @@ When called with a prefix argument, include all archive files as well."
 		     (org-agenda-error)))
 	 (buffer (marker-buffer marker))
 	 (pos (marker-position marker)))
-    (switch-to-buffer-other-window buffer)
-    (widen)
+    (pop-to-buffer
+     buffer
+     `((display-buffer-reuse-window display-buffer-pop-up-window)
+       (reuse-indirect . buffer)))
+    (unless (<= (point-min) pos (point-max))
+      (widen))
     (push-mark)
     (goto-char pos)
     (when (derived-mode-p 'org-mode)

@@ -144,7 +144,7 @@ out time will be 14:50."
   :package-version '(Org . "8.0")
   :type '(choice
 	  (integer :tag "Minutes (0 for no rounding)")
-	  (symbol  :tag "Use `org-time-stamp-rounding-minutes'" 'same-as-time-stamp)))
+	  (const   :tag "Use `org-time-stamp-rounding-minutes'" same-as-time-stamp)))
 
 (defcustom org-clock-out-remove-zero-time-clocks nil
   "Non-nil means remove the clock line when the resulting time is zero."
@@ -3316,7 +3316,7 @@ The details of what will be saved are regulated by the variable
   "Query user when killing Emacs.
 This function is added to `kill-emacs-query-functions'."
   (let ((buf (org-clocking-buffer)))
-    (when (and buf (yes-or-no-p "Clock out and save? "))
+    (when (and buf (yes-or-no-p "Clock out before exiting? "))
       (with-current-buffer buf
         (org-clock-out)
         (save-buffer))))

@@ -963,10 +963,12 @@ Return t when a link has been stored in `org-link-store-props'."
        ;; function.
        (apply #'org-link-store-props
               (cdr (assoc-string
-                    (completing-read
-                     (format "Store link with (default %s): " name)
-                     (mapcar #'car results-alist)
-                     nil t nil nil (symbol-name name))
+                    (if (not interactive?)
+                        (car (nth 0 results-alist))
+                      (completing-read
+                       (format "Store link with (default %s): " name)
+                       (mapcar #'car results-alist)
+                       nil t nil nil (symbol-name name)))
                     results-alist)))
        t))))
 
@@ -2566,6 +2568,31 @@ NAME."
             (org-link--add-to-stored-links link desc)))
         (car org-stored-links)))))
 
+(defun org-link--normalize-filename (filename &optional method)
+  "Return FILENAME as required by METHOD.
+METHOD defaults to the value of `org-link-file-path-type'."
+  (setq method (or method org-link-file-path-type))
+  (cond
+   ((eq method 'absolute)
+    (abbreviate-file-name (expand-file-name filename)))
+   ((eq method 'noabbrev)
+    (expand-file-name filename))
+   ((eq method 'relative)
+    (file-relative-name filename))
+   ((functionp method)
+    (funcall method filename))
+   (t
+    (save-match-data
+      (if (string-match (concat "^" (regexp-quote
+				     (expand-file-name
+				      (file-name-as-directory
+				       default-directory))))
+			(expand-file-name filename))
+	  ;; We are linking a file with relative path name.
+	  (substring (expand-file-name filename)
+		     (match-end 0))
+	(abbreviate-file-name (expand-file-name filename)))))))
+
 ;;;###autoload
 (defun org-insert-link (&optional complete-file link-location description)
   "Insert a link.  At the prompt, enter the link.
@@ -2753,27 +2780,11 @@ non-interactively, don't allow editing the default description."
 		     link path-start (match-beginning 0))
 		  (substring-no-properties link (match-end 0))))
 	       (origpath path))
-	  (cond
-	   ((or (eq org-link-file-path-type 'absolute)
-		(equal complete-file '(16)))
-	    (setq path (abbreviate-file-name (expand-file-name path))))
-	   ((eq org-link-file-path-type 'noabbrev)
-	    (setq path (expand-file-name path)))
-	   ((eq org-link-file-path-type 'relative)
-	    (setq path (file-relative-name path)))
-	   ((functionp org-link-file-path-type)
-	    (setq path (funcall org-link-file-path-type path)))
-	   (t
-	    (save-match-data
-	      (if (string-match (concat "^" (regexp-quote
-					     (expand-file-name
-					      (file-name-as-directory
-					       default-directory))))
-				(expand-file-name path))
-		  ;; We are linking a file with relative path name.
-		  (setq path (substring (expand-file-name path)
-					(match-end 0)))
-		(setq path (abbreviate-file-name (expand-file-name path)))))))
+	  (setq path (org-link--normalize-filename
+                      path
+                      (if (equal complete-file '(16))
+                          'absolute
+                        org-link-file-path-type)))
 	  (setq link (concat type path (and search (concat "::" search))))
 	  (when (equal desc origpath)
 	    (setq desc path)))))
