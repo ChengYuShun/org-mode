@@ -508,13 +508,13 @@ start on the left margin[fn:1] with one or more stars followed by
 a space.  For example:
 
 #+begin_example
-,* Top level headline
+,* First (top) level headline
 ,** Second level
 ,*** Third level
     some text
 ,*** Third level
     more text
-,* Another top level headline
+,* Another first (top) level headline
 #+end_example
 
 #+vindex: org-footnote-section
@@ -3447,7 +3447,7 @@ options:
 | info       | =info:org#External links=                                          |
 | shortdoc   | =shortdoc:text-properties=                                         |
 |            | =shortdoc:text-properties::#get-pos-property=                      |
-| shell      | =shell:ls *.org=                                                   |
+| shell      | =shell:ls *.org= (synchronous), =shell:inkscape&= (asynchronous)   |
 | elisp      | =elisp:(find-file "Elisp.org")= (Elisp form to evaluate)           |
 |            | =elisp:org-agenda= (interactive Elisp command)                     |
 
@@ -5736,10 +5736,22 @@ optional.  The individual parts have the following meaning:
 
 - {{{var(SUMMARY-TYPE)}}} ::
 
-  The summary type.  If specified, the column values for parent nodes
-  are computed from the children[fn:: If more than one summary type
-  applies to the same property, the parent values are computed
-  according to the first of them.].
+  The summary type.  If specified, the column values for parent
+  headings are computed from the direct children.  If there is any
+  existing property defined for the parent nodes, it is not used in
+  the calculations.
+
+  When there is an existing property in parent heading, Org does not
+  only overlay the computed value in the column view, but also
+  overwrites the property value in parent's property drawer[fn:: If
+  more than column definition is requested for the same property, only
+  the first definition will trigger writing to the property drawer.
+  For example, =%EFFORT{mean} %EFFORT(Sum){:}= will write the mean
+  value of =EFFORT= property; not the sum.  If the first column
+  definition does not have summary type (=%EFFORT %EFFORT{mean}=),
+  nothing will be written to the property drawer].
+
+  Summary type is ignored for special properties.
 
   Supported summary types are:
 
@@ -5790,7 +5802,7 @@ constraints.].
 
 #+begin_example
 :COLUMNS:  %25ITEM %9Approved(Approved?){X} %Owner %11Status \
-                   %10Time_Estimate{:} %CLOCKSUM %CLOCKSUM_T
+                   %10Time_Estimate{:}
 :Owner_ALL:    Tammy Mark Karl Lisa Don
 :Status_ALL:   "In progress" "Not started yet" "Finished" ""
 :Approved_ALL: "[ ]" "[X]"
@@ -5808,9 +5820,55 @@ all values.  The =Approved= column does have a modified title
 (=Approved?=, with a question mark).  Summaries are created for the
 =Time_Estimate= column by adding time duration expressions like HH:MM,
 and for the =Approved= column, by providing an =[X]= status if all
-children have been checked.  The =CLOCKSUM= and =CLOCKSUM_T= columns
-are special, they list the sums of CLOCK intervals in the subtree,
-either for all clocks or just for today.
+children have been checked.
+
+The =CLOCKSUM= and =CLOCKSUM_T= column properties are special, they
+list the sums of =CLOCK:= intervals in the subtree, either for all
+clocks (=CLOCKSUM=) or just for today (=CLOCKSUM_T=).  Unlike =:=
+summary type that ignores property values in parent headings, all the
+=CLOCK:= intervals are summed up, including =CLOCK:= lines within
+parent headings.
+
+***** Summaries in deeply nested hierarchy
+
+When computing summaries of deeply nested headings, the summaries are
+computed recursively, from the deepest level to the shallowest.  Here
+is an example:
+
+#+begin_example
+,#+BEGIN: columnview :indent t :format "%ITEM %EFFORT{:mean}" :id global
+| ITEM               | EFFORT  |
+|--------------------+---------|
+| Top level          | 3h 0min |
+| \_  Intermediate 1 | 1h 0min |
+| \_        Leaf 1   | 1h      |
+| \_    Leaf 2       | 1h      |
+| \_    Leaf 3       | 1h      |
+| \_  Intermediate 2 | 5h      |
+,#+END:
+
+,* Top level
+,** Intermediate 1
+:PROPERTIES:
+:EFFORT:   *unused*, will be set to 1h 0min (mean of the leaf nodes)
+:END:
+,***** Leaf 1
+:PROPERTIES:
+:EFFORT: 1h
+:END:
+,*** Leaf 2
+:PROPERTIES:
+:EFFORT: 1h
+:END:
+,*** Leaf 3
+:PROPERTIES:
+:EFFORT: 1h
+:END:
+,** Intermediate 2
+:PROPERTIES:
+:EFFORT: 5h
+:END:
+#+end_example
 
 *** Using column view
 :PROPERTIES:
@@ -6256,11 +6314,10 @@ format.
 
   #+kindex: C-u C-c .
   #+vindex: org-time-stamp-rounding-minutes
-  #+vindex: org-timestamp-rounding-minutes
   When called with a prefix argument, use the alternative format which
   contains date and time.  The default time can be rounded to
   multiples of 5 minutes.  See the option
-  ~org-timestamp-rounding-minutes~.
+  ~org-time-stamp-rounding-minutes~.
 
   #+kindex: C-u C-u C-c .
   With two prefix arguments, insert an active timestamp with the
@@ -8035,15 +8092,15 @@ Now lets look at the elements of a template definition.  Each entry in
   Specification of where the captured item should be placed.  In Org
   files, targets usually define a node.  Entries will become children
   of this node.  Other types will be added to the table or list in the
-  body of this node.  Most target specifications contain a file name.
-  If that file name is the empty string, it defaults to
+  body of this node.  Most target specifications contain a
+  =<file-spec>=.  If it is the empty string, it defaults to
   ~org-default-notes-file~.  A file can also be given as a variable or
   as a function called with no argument.  When an absolute path is not
   specified for a target, it is taken as relative to ~org-directory~.
 
   Valid values are:
 
-  - =(file "path/to/file")= ::
+  - =(file <file-spec>)= ::
 
     Text will be placed at the beginning or end of that file.
 
@@ -8051,31 +8108,31 @@ Now lets look at the elements of a template definition.  Each entry in
 
     Filing as child of this entry, or in the body of the entry.
 
-  - =(file+headline "filename" "node headline")= ::
+  - =(file+headline <file-spec> "node headline")= ::
 
-  - =(file+headline "filename" function-returning-string)= ::
+  - =(file+headline <file-spec> function-returning-string)= ::
 
-  - =(file+headline "filename" symbol-containing-string)= ::
+  - =(file+headline <file-spec> symbol-containing-string)= ::
 
     Fast configuration if the target heading is unique in the file.
 
-  - =(file+olp "filename" "Level 1 heading" "Level 2" ...)= ::
+  - =(file+olp <file-spec> "Level 1 heading" "Level 2" ...)= ::
 
-  - =(file+olp "filename" function-returning-list-of-strings)= ::
+  - =(file+olp <file-spec> function-returning-list-of-strings)= ::
 
-  - =(file+olp "filename" symbol-containing-list-of-strings)= ::
+  - =(file+olp <file-spec> symbol-containing-list-of-strings)= ::
 
     For non-unique headings, the full path is safer.
 
-  - =(file+regexp "filename" "regexp to find location")= ::
+  - =(file+regexp <file-spec> "regexp to find location")= ::
 
     Use a regular expression to position point.
 
-  - =(file+olp+datetree "filename" [ "Level 1 heading" ...])= ::
+  - =(file+olp+datetree <file-spec> [ "Level 1 heading" ...])= ::
 
-  - =(file+olp+datetree "filename" function-returning-list-of-strings)= ::
+  - =(file+olp+datetree <file-spec> function-returning-list-of-strings)= ::
 
-  - =(file+olp+datetree "filename" symbol-containing-list-of-strings)= ::
+  - =(file+olp+datetree <file-spec> symbol-containing-list-of-strings)= ::
 
     This target[fn:30] creates a heading in a date tree[fn:31] for
     today's date.  If the optional outline path is given, the tree
@@ -8083,7 +8140,7 @@ Now lets look at the elements of a template definition.  Each entry in
     level.  Check out the ~:time-prompt~ and ~:tree-type~ properties
     below for additional options.
 
-  - =(file+function "filename" function-finding-location)= ::
+  - =(file+function <file-spec> function-finding-location)= ::
 
     A function to find the right location in the file.
 
@@ -11571,13 +11628,14 @@ CDLaTeX mode is a minor mode that is normally used in combination with
 a major LaTeX mode like AUCTeX in order to speed-up insertion of
 environments and math templates.  Inside Org mode, you can make use of
 some of the features of CDLaTeX mode.  You need to install
-=cdlatex.el= and =texmathp.el= (the latter comes also with AUCTeX)
-from [[https://elpa.nongnu.org/][NonGNU ELPA]] with the [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Package-Installation.html][Emacs packaging system]] or alternatively from
-[[https://staff.fnwi.uva.nl/c.dominik/Tools/cdlatex/]].  Do not use
-CDLaTeX mode itself under Org mode, but use the special version Org
-CDLaTeX minor mode that comes as part of Org.  Turn it on for the
-current buffer with {{{kbd(M-x org-cdlatex-mode)}}}, or for all Org
-files with
+=cdlatex.el= and =texmathp.el= (the latter comes also with AUCTeX).
+The =cdlatex= package can be installed from
+[[https://elpa.nongnu.org/nongnu/cdlatex.html][NonGNU ELPA]] with the
+[[https://www.gnu.org/software/emacs/manual/html_node/emacs/Package-Installation.html][Emacs
+packaging system]].  Do not use CDLaTeX mode itself under Org mode,
+but use the special version Org CDLaTeX minor mode that comes as part
+of Org.  Turn it on for the current buffer with {{{kbd(M-x
+org-cdlatex-mode)}}}, or for all Org files with
 
 #+begin_src emacs-lisp
 (add-hook 'org-mode-hook #'turn-on-org-cdlatex)
@@ -12197,7 +12255,7 @@ further alter what is exported, and how.
   #+kindex: C-c C-e C-f
 
   Toggle force-publishing export.  Publish functions normally only
-  publish changed files (see [[**Triggering Publication]]).  Forced
+  publish changed files (see [[*Triggering Publication]]).  Forced
   publishing causes files to be published even if their timestamps do
   not indicate the file has been changed.
 
@@ -12462,9 +12520,10 @@ following arguments.
 - ~H~ ::
 
   #+vindex: org-export-headline-levels
-  Set the number of headline levels for export
-  (~org-export-headline-levels~).  Below that level, headlines are
-  treated differently.  In most backends, they become list items.
+  Set the last headline level for export as a headline
+  (~org-export-headline-levels~).  For descendants of that level,
+  headlines are treated differently.  In most backends, they become
+  list items.
 
 - ~inline~ ::
 
@@ -13025,6 +13084,10 @@ high-quality interactive slides for presentations.  Beamer is a LaTeX
 document class for creating presentations in PDF, HTML, and other
 popular display formats.
 
+We strongly recommend familiarizing yourself with Beamer terminology
+before reading the rest of this chapter.  See
+<https://en.wikipedia.org/wiki/Beamer_(LaTeX)> and references therein.
+
 *** Beamer export commands
 :PROPERTIES:
 :DESCRIPTION: For creating Beamer documents.
@@ -13288,6 +13351,7 @@ Here is an example of an Org document ready for Beamer export.
 ,#+AUTHOR: Carsten Dominik
 ,#+OPTIONS: H:2 toc:t num:t
 ,#+LATEX_CLASS: beamer
+,#+STARTUP: beamer
 ,#+LATEX_CLASS_OPTIONS: [presentation]
 ,#+BEAMER_THEME: Madrid
 ,#+COLUMNS: %45ITEM %10BEAMER_ENV(Env) %10BEAMER_ACT(Act) %4BEAMER_COL(Col)
@@ -13553,7 +13617,7 @@ name, and date.
 
 *** Exporting to minimal HTML
 :PROPERTIES:
-:DESCRIPTION: Exporting HTML without CSS, Javascript, etc.
+:DESCRIPTION: Exporting HTML without CSS, JavaScript, etc.
 :ALT_TITLE: Bare HTML
 :END:
 
@@ -13612,9 +13676,17 @@ Headlines are exported to =<h1>=, =<h2>=, etc.  Each headline gets the
 see [[*Internal Links]].
 
 #+vindex: org-html-self-link-headlines
-When ~org-html-self-link-headlines~ is set to a non-~nil~ value, the
-text of the headlines is also wrapped in =<a>= tags.  These tags have
-a =href= attribute making the headlines link to themselves.
+Headlines can contain a link to themselves.  To enable it, you can:
+
+- Set the variable ~org-html-self-link-headlines~ to a non-~nil~ value
+- In an Org file, use ~html-self-link-headlines~ option
+  : #+OPTIONS: html-self-link-headlines:t
+
+
+#+texinfo: @noindent
+When enabled, the text of the headlines is wrapped in =<a>= tags.
+These tags have a =href= attribute making the headlines link to
+themselves.
 
 *** Links in HTML export
 :PROPERTIES:
@@ -16517,6 +16589,12 @@ certain built-in types (see ~icalendar-export-sexp-enumerate-all~),
 are exported up to ~icalendar-export-sexp-enumeration-days~ into
 future.].
 
+#+vindex: org-agenda-default-appointment-duration
+If a timestamp contains a time, but doesn't have an explicit end time
+(i.e. time range), then by default the exported event will have a
+duration of 2 hours, but this can be overridden with
+~org-agenda-default-appointment-duration~.
+
 #+vindex: org-icalendar-include-todo
 The iCalendar export backend can also incorporate TODO entries based
 on the configuration of the ~org-icalendar-include-todo~ variable.
@@ -16596,12 +16674,12 @@ multi-line summary, location, or description using =<PROPERTY>+=
 syntax (see [[*Property Syntax]]):
 
 : * Meeting at location with multi-line address
-: <2024-01-08 Mon 14:20-15:00>
 : :PROPERTIES:
 : :LOCATION:  Someplace
 : :LOCATION+: Some Street 5
 : :LOCATION+: 12345 Small Town
 : :END:
+: <2024-01-08 Mon 14:20-15:00>
 
 #+vindex: org-icalendar-include-body
 When Org entries do not have =SUMMARY=, =DESCRIPTION=, =LOCATION= and
@@ -19724,13 +19802,12 @@ group ~org-edit-structure~.
 - ~org-src-lang-modes~ ::
 
   #+vindex: org-src-lang-modes
-  If an Emacs major-mode named ~<LANG>-mode~ exists, where
+  If an Emacs major mode named ~<LANG>-mode~ exists, where
   {{{var(<LANG>)}}} is the language identifier from code block's
-  header line, then the edit buffer uses that major mode.  Use this
+  header line, then the edit buffer uses that major mode.  If the
+  major mode does not exist, or the language identifier is omitted,
+  then the edit buffer falls back to Fundamental mode.  Use this
   variable to arbitrarily map language identifiers to major modes.
-
-  When language identifier is omitted in the src block, Org mode's
-  behavior is undefined.
 
 - ~org-src-window-setup~ ::
 
@@ -21447,7 +21524,7 @@ sources when reading a document.  To that effect, you can use
 a bookmark with the following location:
 
 #+begin_example
-javascript:location.href='org-protocol://open-source?&url='+
+javascript:location.href='org-protocol://open-source?url='+
       encodeURIComponent(location.href);void(0)
 #+end_example
 
@@ -21745,9 +21822,10 @@ from LibreOffice Calc documents.
 
 #+vindex: org-yank-image-save-method
 When yanking images from clipboard, Org saves the image on disk and
-inserts the image link to Org buffer.  Images are either saved as
-attachments to heading (default) or to a globally defined directory.
-The save location is controlled by ~org-yank-image-save-method~.
+inserts the image link to Org buffer.  Images can be saved as
+attachments to heading (default), to a globally defined directory, or
+to a directory returned by a function call.  The save location is
+controlled by ~org-yank-image-save-method~.
 
 #+vindex: org-yank-image-file-name-function
 The yanked images are saved under automatically generated name.  You

@@ -1637,16 +1637,16 @@ symbols are recognized:
 
 time-up            Put entries with time-of-day indications first, early first.
 time-down          Put entries with time-of-day indications first, late first.
-timestamp-up       Sort by any timestamp, early first.
-timestamp-down     Sort by any timestamp, late first.
-scheduled-up       Sort by scheduled timestamp, early first.
-scheduled-down     Sort by scheduled timestamp, late first.
-deadline-up        Sort by deadline timestamp, early first.
-deadline-down      Sort by deadline timestamp, late first.
-ts-up              Sort by active timestamp, early first.
-ts-down            Sort by active timestamp, late first.
-tsia-up            Sort by inactive timestamp, early first.
-tsia-down          Sort by inactive timestamp, late first.
+timestamp-up       Sort by any timestamp date, early first.
+timestamp-down     Sort by any timestamp date, late first.
+scheduled-up       Sort by scheduled timestamp date, early first.
+scheduled-down     Sort by scheduled timestamp date, late first.
+deadline-up        Sort by deadline timestamp date, early first.
+deadline-down      Sort by deadline timestamp date, late first.
+ts-up              Sort by active timestamp date, early first.
+ts-down            Sort by active timestamp date, late first.
+tsia-up            Sort by inactive timestamp date, early first.
+tsia-down          Sort by inactive timestamp date, late first.
 category-keep      Keep the default order of categories, corresponding to the
 		   sequence in `org-agenda-files'.
 category-up        Sort alphabetically by category, A-Z.
@@ -4595,10 +4595,10 @@ START-DAY is an absolute time value."
 	((eq span 'fortnight) 14)
 	((eq span 'month)
 	 (let ((date (calendar-gregorian-from-absolute start-day)))
-	   (calendar-last-day-of-month (car date) (cl-caddr date))))
+           (calendar-last-day-of-month (car date) (caddr date))))
 	((eq span 'year)
 	 (let ((date (calendar-gregorian-from-absolute start-day)))
-	   (if (calendar-leap-year-p (cl-caddr date)) 366 365)))))
+           (if (calendar-leap-year-p (caddr date)) 366 365)))))
 
 (defun org-agenda-span-name (span)
   "Return a SPAN name."
@@ -7360,6 +7360,15 @@ The optional argument TYPE tells the agenda type."
 	(max-entries (cond ((listp org-agenda-max-entries)
 			    (cdr (assoc type org-agenda-max-entries)))
 			   (t org-agenda-max-entries))))
+    ;; Make sure that read-only is not set on entries.  Agenda expects
+    ;; all the inserted text to be editable, while e.g. column view
+    ;; may apply read-only text properties in org buffers.
+    (mapc (lambda (entry)
+            (remove-text-properties
+             0 (length entry)
+             '(read-only nil)
+             entry))
+          list)
     (when org-agenda-before-sorting-filter-function
       (setq list
 	    (delq nil
@@ -8201,7 +8210,7 @@ FLAG specifies the type of completion operation to perform.  This
 function is passed as a collection function to `completing-read',
 which see."
   (let ((completion-ignore-case t)	;tags are case-sensitive
-	(confirm (lambda (x) (stringp x)))
+        (confirm #'stringp)
 	(prefix "")
 	(operator "")
 	table
@@ -10125,15 +10134,15 @@ When called programmatically, FORCE-DIRECTION can be `set', `up',
   (org-agenda-date-later (- arg) what))
 
 (defun org-agenda-date-later-minutes (arg)
-  "Change the time of this item, in units of `org-timestamp-rounding-minutes'."
+  "Change the time of this item, in units of `org-time-stamp-rounding-minutes'."
   (interactive "p")
-  (setq arg (* arg (cadr org-timestamp-rounding-minutes)))
+  (setq arg (* arg (cadr org-time-stamp-rounding-minutes)))
   (org-agenda-date-later arg 'minute))
 
 (defun org-agenda-date-earlier-minutes (arg)
-  "Change the time of this item, in units of `org-timestamp-rounding-minutes'."
+  "Change the time of this item, in units of `org-time-stamp-rounding-minutes'."
   (interactive "p")
-  (setq arg (* arg (cadr org-timestamp-rounding-minutes)))
+  (setq arg (* arg (cadr org-time-stamp-rounding-minutes)))
   (org-agenda-date-earlier arg 'minute))
 
 (defun org-agenda-date-later-hours (arg)

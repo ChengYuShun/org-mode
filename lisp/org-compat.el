@@ -78,7 +78,6 @@
 (declare-function speedbar-line-directory "speedbar" (&optional depth))
 (declare-function table--at-cell-p "table" (position &optional object at-column))
 (declare-function ob-clojure-eval-with-cmd "ob-clojure" (cmd expanded))
-(declare-function org-fold-folded-p "org-fold" (&optional pos spec-or-alias))
 (declare-function org-fold-hide-sublevels "org-fold" (levels))
 (declare-function org-fold-hide-subtree "org-fold" ())
 (declare-function org-fold-region "org-fold" (from to flag &optional spec))
@@ -292,10 +291,16 @@ older than 27.1"
       (if tree (push tree elems))
       (nreverse elems))))
 
-(if (version< emacs-version "27.1")
+(with-no-warnings ; `replace-buffer-contents' is obsolete in Emacs 31
+  (cond
+   ((version< emacs-version "27.1")
     (defsubst org-replace-buffer-contents (source &optional _max-secs _max-costs)
-      (replace-buffer-contents source))
-  (defalias 'org-replace-buffer-contents #'replace-buffer-contents))
+      (replace-buffer-contents source)))
+   ((version< emacs-version "31")
+    (defalias 'org-replace-buffer-contents #'replace-buffer-contents))
+   (t
+    (defsubst org-replace-buffer-contents (source &optional max-secs max-costs)
+      (replace-region-contents (point-min) (point-max) source max-secs max-costs)))))
 
 (unless (fboundp 'proper-list-p)
   ;; `proper-list-p' was added in Emacs 27.1.  The function below is
@@ -1947,7 +1952,7 @@ key."
 	          (or (re-search-backward (concat "^\\(?:" outline-regexp "\\)")
 				          nil t)
                       (signal 'outline-before-first-heading nil))
-	          (setq found (and (or invisible-ok (not (org-fold-folded-p)))
+	          (setq found (and (or invisible-ok (not (org-invisible-p)))
 			           (point)))))
 	      (goto-char found)
 	      found)))
@@ -1976,7 +1981,7 @@ key."
   (if (derived-mode-p 'org-mode)
       (save-excursion
         (org-back-to-heading)
-        (if (not (org-fold-folded-p (line-end-position)))
+        (if (not (org-invisible-p (line-end-position)))
             (org-fold-hide-subtree)
           (org-fold-show-children)
           (org-fold-show-entry 'hide-drawers)))

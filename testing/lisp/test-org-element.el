@@ -1607,7 +1607,16 @@ CLOCK: [2023-10-13 Fri 14:40]--[2023-10-13 Fri 14:51] =>  0:11"
   (should
    (org-test-with-temp-text ": A\n "
      (= (org-element-property :end (org-element-at-point))
-	(point-max)))))
+	(point-max))))
+  ;; Correctly parse post-blank
+  (should
+   (org-test-with-temp-text ": A\n "
+     (= (org-element-property :post-blank (org-element-at-point))
+	1)))
+  (should
+   (org-test-with-temp-text ": A\nB"
+     (= (org-element-property :post-blank (org-element-at-point))
+	0))))
 
 
 ;;;; Footnote Definition
@@ -2849,6 +2858,10 @@ Outside list"
 	 (org-element-type (org-element-at-point)))))
   (should
    (eq 'property-drawer
+       (org-test-with-temp-text "\n  \t\n# C\n# C\n  \n\n\n<point>:PROPERTIES:\n:prop: value\n:END:"
+	 (org-element-type (org-element-at-point)))))
+  (should
+   (eq 'property-drawer
        (org-test-with-temp-text "\n<point>:PROPERTIES:\n:prop: value\n:END:"
 	 (org-element-type (org-element-at-point)))))
   ;; Allow properties without value and no property at all.
@@ -3491,6 +3504,17 @@ Outside list"
    (equal "Foo\n\n\n"
 	  (org-element-interpret-data
            '(section (:post-blank 1) (paragraph (:post-blank 1) "Foo"))))))
+
+(ert-deftest test-org-element/org-data-interpreter ()
+  "Test `org-element-org-data-interpreter'."
+  (should
+   (equal (org-test-parse-and-interpret "Test.\n")
+	  "Test.\n"))
+  (should
+   (equal (org-test-parse-and-interpret "
+
+Test.\n")
+	  "\n\nTest.\n")))
 
 (ert-deftest test-org-element/center-block-interpreter ()
   "Test center block interpreter."
@@ -4756,6 +4780,11 @@ Text
    (eq 'underline
        (org-test-with-temp-text "* Headline _<point>with_ underlining"
 	 (org-element-type (org-element-context)))))
+  ;; Should not find objects in headline tags
+  (should-not
+   (eq 'timestamp
+       (org-test-with-temp-text "* Headline <2020-04-01>        :tag1<point>:"
+         (org-element-type (org-element-context)))))
   ;; Find objects in objects.
   (should
    (eq 'macro

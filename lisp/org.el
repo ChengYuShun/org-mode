@@ -450,7 +450,16 @@ This one does not require the space after the date, so it can be used
 on a string that terminates immediately after the date.")
 
 (defconst org-ts-regexp1 "\\(\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)\\(?: *\\([^]+0-9>\r\n -]+\\)\\)?\\( \\([0-9]\\{1,2\\}\\):\\([0-9]\\{2\\}\\)\\)?\\)"
-  "Regular expression matching time strings for analysis.")
+  "Regular expression matching time strings for analysis.
+This regular expression provides the following groups:
+  1:   everything (required for embedding)
+   2:  year
+   3:  month
+   4:  day
+   5:  weekday name (optional)
+   6:  time part (optional)
+    7: hour
+    8: minute")
 
 (defconst org-ts-regexp2 (concat "<" org-ts-regexp1 "[^>\n]\\{0,16\\}>")
   "Regular expression matching time stamps, with groups.")
@@ -481,6 +490,13 @@ The time stamps may be either active or inactive.")
   "Regular expression for specifying repeated events.
 After a match, group 1 contains the repeat expression.")
 
+;; The weekday name "%a" is considered semi-optional in these formats,
+;; see https://list.orgmode.org/87fricxatw.fsf@localhost/.  It is
+;; "optional" because the `org-timestamp-*' functions work alright on
+;; weekday-less timestamps in paragraphs when one omits the "%a".  But
+;; it is only "semi"-optional since Org cannot process properly
+;; timestamps in CLOCK, DEADLINE, and SCHEDULED lines when one omits
+;; the "%a".
 (defvaralias 'org-time-stamp-formats 'org-timestamp-formats)
 (defconst org-timestamp-formats '("%Y-%m-%d %a" . "%Y-%m-%d %a %H:%M")
   "Formats for `format-time-string' which are used for time stamps.
@@ -676,7 +692,7 @@ An entry can be toggled between COMMENT and normal with
 ;;;; LaTeX Environments and Fragments
 
 (defconst org-latex-regexps
-  '(("begin" "^[ \t]*\\(\\\\begin{\\([a-zA-Z0-9\\*]+\\)\\(?:.\\|\n\\)+?\\\\end{\\2}\\)" 1 t)
+  '(("begin" "^[ \t]*\\(\\\\begin{\\([a-zA-Z0-9\\*]+\\)\\(?:.\\|\n\\)+?\\\\end{\\2}[ \t]*\n?\\)" 1 t)
     ;; ("$" "\\([ \t(]\\|^\\)\\(\\(\\([$]\\)\\([^ \t\n,.$].*?\\(\n.*?\\)\\{0,5\\}[^ \t\n,.$]\\)\\4\\)\\)\\([ \t.,?;:'\")]\\|$\\)" 2 nil)
     ("$1" "\\([^$]\\|^\\)\\(\\$[^ \t\r\n,;.$]\\$\\)\\(\\s.\\|\\s-\\|\\s(\\|\\s)\\|\\s\"\\|'\\|$\\)" 2 nil)
     ("$"  "\\([^$]\\|^\\)\\(\\(\\$\\([^ \t\n,;.$][^$\n\r]*?\\(\n[^$\n\r]*?\\)\\{0,2\\}[^ \t\n,.$]\\)\\$\\)\\)\\(\\s.\\|\\s-\\|\\s(\\|\\s)\\|\\s\"\\|'\\|$\\)" 2 nil)
@@ -2538,10 +2554,10 @@ of minutes to shift."
 	  (integer :tag "when modifying times")))
 
 ;; Normalize old customizations of this variable.
-(when (integerp org-timestamp-rounding-minutes)
-  (setq org-timestamp-rounding-minutes
-	(list org-timestamp-rounding-minutes
-	      org-timestamp-rounding-minutes)))
+(when (integerp org-time-stamp-rounding-minutes)
+  (setq org-time-stamp-rounding-minutes
+	(list org-time-stamp-rounding-minutes
+	      org-time-stamp-rounding-minutes)))
 
 (defcustom org-display-custom-times nil
   "Non-nil means overlay custom formats over all time stamps.
@@ -3203,16 +3219,16 @@ There are multiple ways to set the category.  One way is to set
 it in the document property drawer.  For example:
 
 :PROPERTIES:
-:CATEGORY: ELisp
+:CATEGORY: Elisp
 :END:
 
 Other ways to define it is as an Emacs file variable, for example
 
-#   -*- mode: org; org-category: \"ELisp\"
+#   -*- mode: org; org-category: \"Elisp\"
 
 or for the file to contain a special line:
 
-#+CATEGORY: ELisp
+#+CATEGORY: Elisp
 
 If the file does not specify a category, then file's base name
 is used instead.")
@@ -3396,6 +3412,15 @@ All available processes and theirs documents can be found in
      :image-size-adjust (1.7 . 1.5)
      :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
      :image-converter ("dvisvgm %f --no-fonts --exact-bbox --scale=%S --output=%O"))
+    (xelatex
+     :programs ("xelatex" "dvisvgm")
+     :description "xdv > svg"
+     :message "you need to install the programs: xelatex and dvisvgm."
+     :image-input-type "xdv"
+     :image-output-type "svg"
+     :image-size-adjust (1.7 . 1.5)
+     :latex-compiler ("xelatex -no-pdf -interaction nonstopmode -output-directory %o %f")
+     :image-converter ("dvisvgm %f --no-fonts --exact-bbox --scale=%S --output=%O"))
     (imagemagick
      :programs ("latex" "convert")
      :description "pdf > png"
@@ -3434,12 +3459,18 @@ PROPERTIES accepts the following attributes:
                       controlled by `org-format-latex-header',
                       `org-latex-default-packages-alist' and
                       `org-latex-packages-alist', which see.
-  :latex-compiler     list of LaTeX commands, as strings.  Each of them is given
-                      to the shell.  Place-holders \"%t\", \"%b\" and \"%o\" are
+  :latex-compiler list of LaTeX commands, as strings or a function.
+                      Each of them is given to the shell.
+                      Place-holders \"%t\", \"%b\" and \"%o\" are
                       replaced with values defined below.
-  :image-converter    list of image converter commands strings.  Each of them is
-                      given to the shell and supports any of the following
-                      place-holders defined below.
+                      When a function, that function should accept the
+                      file name as its single argument.
+  :image-converter list of image converter commands strings or a
+                      function.  Each of them is given to the shell
+                      and supports any of the following place-holders
+                      defined below.
+                      When a function, that function should accept the
+                      file name as its single argument.
 
 If set, :transparent-image-converter is used instead of :image-converter to
 convert an image when the background color is nil or \"Transparent\".
@@ -3457,7 +3488,7 @@ Place-holders only used by `:image-converter':
   %S    the image size scale ratio, which is used to adjust image size by some
         processing commands."
   :group 'org-latex
-  :package-version '(Org . "9.6")
+  :package-version '(Org . "9.8")
   :type '(alist :tag "LaTeX to image backends"
 		:value-type (plist)))
 
@@ -3818,7 +3849,11 @@ After a match, the match groups contain these elements:
 ;; https://orgmode.org/list/B72CDC2B-72F6-43A8-AC70-E6E6295766EC@gmail.com
 (defvar org-emphasis-regexp-components
   '("-[:space:]('\"{" "-[:space:].,:!?;'\")}\\[" "[:space:]" "." 1)
-  "Components used to build the regular expression for emphasis.
+  "Components used to build the regular expression for FONTIFYING emphasis.
+WARNING: This variable only affects visual fontification, but does not
+change Org markup.  For example, it does not affect how emphasis markup
+is interpreted on export.
+
 This is a list with five entries.  Terminology:  In an emphasis string
 like \" *strong word* \", we call the initial space PREMATCH, the final
 space POSTMATCH, the stars MARKERS, \"s\" and \"d\" are BORDER characters
@@ -4333,7 +4368,7 @@ related expressions."
 		  '("ARCHIVE" "CATEGORY" "COLUMNS" "PRIORITIES"))))
       ;; Startup options.  Get this early since it does change
       ;; behavior for other options (e.g., tags).
-      (let ((startup (cl-mapcan (lambda (value) (split-string value))
+      (let ((startup (cl-mapcan #'split-string
 				(cdr (assoc "STARTUP" alist)))))
 	(dolist (option startup)
 	  (pcase (assoc-string option org-startup-options t)
@@ -4974,6 +5009,10 @@ This is for getting out of special buffers like capture.")
     st)
   "Syntax table including \"@\" and \"_\" as word constituents.")
 
+(defun org--set-tab-width (&rest _)
+  "Set `tab-width' to be 8."
+  (setq-local tab-width 8))
+
 ;;;###autoload
 (define-derived-mode org-mode outline-mode "Org"
   "Outline-based notes management and organizer, alias
@@ -4996,7 +5035,16 @@ The following commands are available:
   (setq-local org-mode-loading t)
   ;; Force tab width - indentation is significant in lists, so we need
   ;; to make sure that it is consistent across configurations.
-  (setq-local tab-width 8)
+  (org--set-tab-width)
+  ;; Really force it, even if dir-locals or file-locals set it - we
+  ;; need tab-width = 8 as a part of Org syntax.
+  (add-hook 'hack-local-variables-hook
+            #'org--set-tab-width 90 'local)
+  ;; In Emacs <30, editorconfig-mode uses advices, so we cannot rely
+  ;; upon `hack-local-variables-hook' to run after editorconfig
+  ;; tab-width settings are applied.
+  (add-hook 'editorconfig-after-apply-functions
+            #'org--set-tab-width 90 'local)
   (org-load-modules-maybe)
   (when org-agenda-file-menu-enabled
     (org-install-agenda-files-menu))
@@ -5122,7 +5170,7 @@ The following commands are available:
 	      (lambda () (org-table-align) (org-table-shrink)))
 	     (org-startup-align-all-tables #'org-table-align)
 	     (t #'org-table-shrink))
-       t))
+       t 'org))
     ;; Suppress modification hooks to speed up the startup.
     ;; However, do it only when text properties/overlays, but not
     ;; buffer text are actually modified.  We still need to track text
@@ -5206,10 +5254,10 @@ The following commands are available:
 (defun org-current-time (&optional rounding-minutes past)
   "Current time, possibly rounded to ROUNDING-MINUTES.
 When ROUNDING-MINUTES is not an integer, fall back on the car of
-`org-timestamp-rounding-minutes'.  When PAST is non-nil, ensure
+`org-time-stamp-rounding-minutes'.  When PAST is non-nil, ensure
 the rounding returns a past time."
   (let ((r (or (and (integerp rounding-minutes) rounding-minutes)
-	       (car org-timestamp-rounding-minutes)))
+	       (car org-time-stamp-rounding-minutes)))
 	(now (current-time)))
     (if (< r 1)
 	now
@@ -5478,7 +5526,7 @@ by a #."
   :group 'org-appearance)
 
 (defun org-fontify-meta-lines-and-blocks (limit)
-  (condition-case-unless-debug nil
+  (condition-case nil
       (org-fontify-meta-lines-and-blocks-1 limit)
     (error (message "Org mode fontification error in %S at %d"
 		    (current-buffer)
@@ -6538,9 +6586,8 @@ Assume that point is on the inserted heading."
 	    (cond
 	     ((org-fold-folded-p
                (max (point-min)
-                    (1- (line-beginning-position)))
-               'headline)
-	      (org-fold-region (line-end-position 0) (line-end-position) nil 'headline))
+                    (1- (line-beginning-position))))
+	      (org-fold-region (line-end-position 0) (line-end-position) nil))
 	     (t nil))
           (pcase (get-char-property-and-overlay (point) 'invisible)
 	    (`(outline . ,o)
@@ -8040,7 +8087,7 @@ function is being called interactively."
 		  (float-time now))))
 	     ((= dcst ?p)
               (if (re-search-forward org-priority-regexp (line-end-position) t)
-		  (string-to-char (match-string 2))
+                  (org-priority-to-value (match-string 2))
 		org-priority-default))
 	     ((= dcst ?r)
 	      (or (org-entry-get nil property) ""))
@@ -9496,7 +9543,7 @@ With numeric prefix arg, switch to the Nth state.
 With a numeric prefix arg of 0, inhibit note taking for the change.
 With a numeric prefix arg of -1, cancel repeater to allow marking as DONE.
 
-When called through ELisp, arg is also interpreted in the following way:
+When called through Elisp, arg is also interpreted in the following way:
 `none'        -> empty state
 \"\"            -> switch to empty state
 `done'        -> switch to DONE
@@ -11483,6 +11530,7 @@ headlines matching this string."
 		 'todo-state todo
                  'ts-date ts-date
 		 'priority priority
+                 'urgency priority
                  'type (concat "tagsmatch" ts-date-type))
 	       (push txt rtn))
 	      ((functionp action)
@@ -12874,7 +12922,7 @@ variables is set."
 	  (cond
 	   (increment
 	    (unless allowed (user-error "Allowed effort values are not set"))
-	    (or (cl-caadr (member (list current) allowed))
+            (or (caadr (member (list current) allowed))
 		(user-error "Unknown value %S among allowed values" current)))
 	   (value
 	    (if (stringp value) value
@@ -14105,10 +14153,10 @@ the time/date that is used for everything that is not specified by the
 user."
   (require 'parse-time)
   (let* ((org-with-time with-time)
-	 (org-timestamp-rounding-minutes
+	 (org-time-stamp-rounding-minutes
 	  (if (equal org-with-time '(16))
 	      '(0 0)
-	    org-timestamp-rounding-minutes))
+	    org-time-stamp-rounding-minutes))
 	 (ct (org-current-time))
 	 (org-def (or org-overriding-default-time default-time ct))
 	 (org-defdecode (decode-time org-def))
@@ -15351,7 +15399,7 @@ The date is changed by N times WHAT.  WHAT can be `day', `month',
 position in the timestamp determines what is changed.
 
 When optional argument UPDOWN is non-nil, minutes are rounded
-according to `org-timestamp-rounding-minutes'.
+according to `org-time-stamp-rounding-minutes'.
 
 When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
 \"--2d\"."
@@ -15359,7 +15407,7 @@ When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
 	(timestamp? (org-at-timestamp-p 'lax))
 	origin-cat
 	with-hm inactive
-	(dm (max (nth 1 org-timestamp-rounding-minutes) 1))
+	(dm (max (nth 1 org-time-stamp-rounding-minutes) 1))
 	extra rem
 	ts time time0 fixnext clrgx)
     (unless timestamp? (user-error "Not at a timestamp"))
@@ -15453,9 +15501,13 @@ When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
 	(looking-at org-ts-regexp3)
 	(goto-char
 	 (pcase origin-cat
-	   ;; `day' category ends before `hour' if any, or at the end
-	   ;; of the day name.
-	   (`day (min (or (match-beginning 7) (1- (match-end 5))) origin))
+	   ;; `day' category ends at the end of the weekday name if
+	   ;; any (group 5), or before `hour' if any (group 7), or at
+	   ;; the end of the timestamp (group 1).
+	   (`day (min (cond ((match-end 5) (1- (match-end 5)))
+                            ((match-beginning 7))
+                            (t (1- (match-end 1))))
+                      origin))
 	   (`hour (min (match-end 7) origin))
 	   (`minute (min (1- (match-end 8)) origin))
 	   ((pred integerp) (min (1- (match-end 0)) origin))
@@ -16574,8 +16626,15 @@ This uses  `org-latex-to-html-convert-command', which see."
 The function assumes that the display has the same pixel width in
 the horizontal and vertical directions."
   (if (display-graphic-p)
-      (round (/ (display-pixel-height)
-		(/ (display-mm-height) 25.4)))
+      (seq-max
+       (mapcar
+        (lambda (attr-list)
+          ;; Compute the DPI for a given display ATTR-LIST
+          (let* ((height-mm   (nth 1 (alist-get 'mm-size attr-list)))
+                 (height-px   (nth 3 (alist-get 'geometry attr-list)))
+                 (scale       (alist-get 'scale-factor attr-list 1.0)))
+            (round (/ (/ height-px scale) (/ height-mm 25.4)))))
+        (display-monitor-attributes-list)))
     (error "Attempt to calculate the dpi of a non-graphic display")))
 
 (defun org-create-formula-image
@@ -17426,7 +17485,8 @@ function runs `org-metaup-final-hook' using the same logic."
             (org-at-heading-p))))
     (when (org-check-for-hidden 'headlines) (org-hidden-tree-error))
     (let ((beg (region-beginning))
-          (end (region-end)))
+          (end (region-end))
+          (region-extended nil))
       (save-excursion
         ;; Go a little earlier because `org-move-subtree-down' will
         ;; insert before markers and we may overshoot in some cases.
@@ -17444,7 +17504,16 @@ function runs `org-metaup-final-hook' using the same logic."
           ;; Drag first subtree above below the selected.
           (while (< (point) end)
             (call-interactively 'org-move-subtree-down)
-            (setq deactivate-mark (org--deactivate-mark)))))))
+            (setq deactivate-mark (org--deactivate-mark)))
+          ;; When `org-move-subtree-down' inserts before markers, the
+          ;; region boundaries will extend to the moved
+          ;; heading. Prevent this.
+          (when (<= (point) (region-end))
+            (setq region-extended t))))
+      (when region-extended
+        (if (= (region-beginning) (point))
+            (set-mark (1+ end))
+          (goto-char (1+ end))))))
    ((org-region-active-p)
     (let* ((a (save-excursion
                 (goto-char (region-beginning))
@@ -17827,7 +17896,7 @@ context.  See the individual commands for more information."
    (if (org-at-table-p) #'org-table-cut-region #'org-cut-subtree)))
 
 (defun org-paste-special (arg)
-  "Paste rectangular region into table, or past subtree relative to level.
+  "Paste rectangular region into table, or paste subtree relative to level.
 Calls `org-table-paste-rectangle' or `org-paste-subtree', depending on context.
 See the individual commands for more information."
   (interactive "P")
@@ -18047,6 +18116,8 @@ This command does many different things, depending on context:
 	     (org-toggle-radio-button arg)
 	   (let* ((box (org-element-property :checkbox context))
 		  (struct (org-element-property :structure context))
+                  ;; Avoid modifying cached structure by side effect.
+                  (struct (copy-tree struct))
 		  (old-struct (copy-tree struct))
 		  (parents (org-list-parents-alist struct))
 		  (prevs (org-list-prevs-alist struct))
@@ -18090,6 +18161,8 @@ This command does many different things, depending on context:
 	     (org-toggle-radio-button arg)
 	   (let* ((begin (org-element-contents-begin context))
 		  (struct (org-element-property :structure context))
+                  ;; Avoid modifying cached structure by side effect.
+                  (struct (copy-tree struct))
 		  (old-struct (copy-tree struct))
 		  (first-box (save-excursion
 			       (goto-char begin)
@@ -19493,10 +19566,16 @@ ELEMENT."
 	  ;; and contents.
 	  ((and post-affiliated (= (line-beginning-position) post-affiliated))
 	   (org--get-expected-indentation element t))
-	  ;; POS is after contents in a greater element.  Indent like
-	  ;; the beginning of the element.
-	  ((and (memq type org-element-greater-elements)
-		(let ((cend (org-element-contents-end element)))
+	  ;; POS is after contents in a greater element or other block.
+	  ;; Indent like the beginning of the element.
+	  ((and (or (memq type org-element-greater-elements)
+                    (memq type '(comment-block example-block export-block
+                                               src-block verse-block)))
+		(let ((cend (or (org-element-contents-end element)
+                                (org-with-wide-buffer
+			         (goto-char (org-element-end element))
+			         (skip-chars-backward " \r\t\n")
+			         (line-beginning-position)))))
 		  (and cend (<= cend pos))))
 	   ;; As a special case, if point is at the end of a footnote
 	   ;; definition or an item, indent like the very last element
@@ -19561,7 +19640,7 @@ Indentation is done according to the following rules:
 
   - In the code part of a source block, use language major mode
     to indent current line if `org-src-tab-acts-natively' is
-    non-nil.  If it is nil, do nothing.
+    non-nil.
 
   - Otherwise, indent like the first non-blank line above.
 
@@ -19608,6 +19687,10 @@ Also align node properties according to `org-property-format'."
                       (org-with-point-at (org-element-property :begin element)
                         (+ (org-current-text-indentation)
                            org-edit-src-content-indentation)))))
+               ;; Avoid over-indenting when beginning of a new line is not empty.
+               ;; https://list.orgmode.org/OMCpuwZ--J-9@phdk.org/
+               (when block-content-ind
+                 (save-excursion (indent-line-to block-content-ind)))
                (ignore-errors ; do not err when there is no proper major mode
                  ;; It is important to call `indent-according-to-mode'
                  ;; rather than `indent-line-function' here or we may
@@ -20570,11 +20653,14 @@ it has a `diary' type."
 (defcustom org-yank-image-save-method 'attach
   "Method to save images yanked from clipboard and dropped to Emacs.
 It can be the symbol `attach' to add it as an attachment, or a
-directory name to copy/cut the image to that directory."
+directory name to copy/cut the image to that directory, or a
+function that will be called without arguments and should return the
+directory name, as a string."
   :group 'org
   :package-version '(Org . "9.7")
   :type '(choice (const :tag "Add it as attachment" attach)
-                 (directory :tag "Save it in directory"))
+                 (directory :tag "Save it in directory")
+                 (function :tag "Save it in a directory returned from the function call"))
   :safe (lambda (x) (eq x 'attach)))
 
 (defcustom org-yank-image-file-name-function #'org-yank-image-autogen-filename
@@ -20614,26 +20700,37 @@ end."
          (iname (funcall org-yank-image-file-name-function))
          (filename (with-no-warnings ; Suppress warning in Emacs <28
                      (file-name-with-extension iname ext)))
+         (dirname (cond ((eq org-yank-image-save-method 'attach) temporary-file-directory)
+                        ((stringp org-yank-image-save-method) org-yank-image-save-method)
+                        ((functionp org-yank-image-save-method)
+                         (let ((retval (funcall org-yank-image-save-method)))
+                           (when (not (stringp retval))
+                             (user-error
+                              "`org-yank-image-save-method' did not return a string: %S"
+                              retval))
+                           retval))
+                        (t (user-error
+                            "Unknown value of `org-yank-image-save-method': %S"
+                            org-yank-image-save-method))))
          (absname (expand-file-name
                    filename
-                   (if (eq org-yank-image-save-method 'attach)
-                       temporary-file-directory
-                     org-yank-image-save-method))))
+                   dirname)))
     (when (and (not (eq org-yank-image-save-method 'attach))
-               (not (file-directory-p org-yank-image-save-method)))
-      (make-directory org-yank-image-save-method t))
+               (not (file-directory-p dirname)))
+      (make-directory dirname t))
     ;; DATA is a raw image.  Tell Emacs to write it raw, without
     ;; trying to auto-detect the coding system.
     (let ((coding-system-for-write 'emacs-internal))
       (with-temp-file absname
         (insert data)))
-    (if (null (eq org-yank-image-save-method 'attach))
-        (insert (org-link-make-string
-                 (concat "file:"
-                         (org-link--normalize-filename absname))))
-      (require 'org-attach)
-      (org-attach-attach absname nil 'mv)
-      (insert (org-link-make-string (concat "attachment:" filename))))))
+    (insert
+     (if (not (eq org-yank-image-save-method 'attach))
+         (org-link-make-string (concat "file:" (org-link--normalize-filename absname)))
+       (progn
+         (require 'org-attach)
+         (org-attach-attach absname nil 'mv)
+         (org-link-make-string (concat "attachment:" filename)))))
+    ))
 
 ;; I cannot find a spec for this but
 ;; https://indigo.re/posts/2021-12-21-clipboard-data.html and pcmanfm
@@ -20744,6 +20841,8 @@ URLS is a list of file URL."
       (org--dnd-local-file-handler u action sep))))
 
 (put 'org--dnd-multi-local-file-handler 'dnd-multiple-handler t)
+
+(declare-function dnd-open-local-file "dnd" (uri action))
 
 (defun org--dnd-local-file-handler (url action &optional separator)
   "Handle file URL as per ACTION.
@@ -21206,7 +21305,7 @@ interactive command with similar behavior."
               (org-element-at-point)
               (lambda (el)
                 (goto-char (org-element-begin el))
-                (or invisible-ok (not (org-fold-folded-p))))
+                (or invisible-ok (not (org-invisible-p))))
             '(headline inlinetask)
             'with-self 'first-match)
         (user-error "Before first headline at position %d in buffer %s"
@@ -21239,7 +21338,7 @@ Respect narrowing."
 If INVISIBLE-NOT-OK is non-nil, an invisible heading line is not ok."
   (save-excursion
     (forward-line 0)
-    (and (or (not invisible-not-ok) (not (org-fold-folded-p)))
+    (and (or (not invisible-not-ok) (not (org-invisible-p)))
 	 (looking-at outline-regexp))))
 
 (defun org-in-commented-heading-p (&optional no-inheritance element)

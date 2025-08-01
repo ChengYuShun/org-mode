@@ -350,6 +350,7 @@ For Gnus, use any of
     `gnus'
     `gnus-other-frame'
     `org-gnus-no-new-news'
+    `org-gnus-no-new-news-other-frame'
 For FILE, use any of
     `find-file'
     `find-file-other-window'
@@ -361,6 +362,7 @@ For the calendar, use the variable `calendar-setup'.
 For BBDB, it is currently only possible to display the matches in
 another window."
   :group 'org-link-follow
+  :package-version  '(Org . "9.8")
   :type '(list
 	  (cons (const vm)
 		(choice
@@ -376,7 +378,8 @@ another window."
 		(choice
 		 (const gnus)
 		 (const gnus-other-frame)
-		 (const org-gnus-no-new-news)))
+		 (const org-gnus-no-new-news)
+                 (const org-gnus-no-new-news-other-frame)))
 	  (cons (const file)
 		(choice
 		 (const find-file)
@@ -1019,7 +1022,9 @@ AFTER is true when this function is called post-change."
     ;; Clear image from cache to avoid image not updating upon
     ;; changing on disk.  See Emacs bug#59902.
     (when-let* ((disp (overlay-get ov 'display))
-                ((imagep disp)))
+                ((if (fboundp 'imagep)
+                     (imagep disp)
+                   (eq 'image (car-safe disp)))))
       (image-flush disp))
     (delete-overlay ov)))
 
@@ -1970,7 +1975,12 @@ also use `org-link-preview-region'."
 			         scope (length new)
                                  (if include-linked "(including images with description)"
                                    ""))
-		       (format "[%s] No images to display inline" scope))))))))))
+                       (if (equal scope "buffer")
+		           (format "[%s] No images to display inline" scope)
+                         (format
+                          (substitute-command-keys
+                           "[%s] No images to display inline.  Use `\\[universal-argument] \\[universal-argument]' or 11 argument to preview the whole buffer")
+                          scope)))))))))))
     (cond
      ;; Region selected :: display previews in region.
      ((and beg end)
@@ -1978,7 +1988,7 @@ also use `org-link-preview-region'."
                (and (equal arg '(4)) 'remove)))
      ;; C-u argument: clear image at point or in entry
      ((equal arg '(4))
-      (if-let ((ov (cdr (get-char-property-and-overlay
+      (if-let* ((ov (cdr (get-char-property-and-overlay
                          (point) 'org-image-overlay))))
           ;; clear link preview at point
           (funcall toggle-previews
@@ -2069,13 +2079,15 @@ buffer boundaries with possible narrowing."
                             (not (org-element-contents-begin link)))
                         (org-element-property :path link))))
           ;; Create an overlay to hold the preview
-          (let ((ov (make-overlay
-                     (org-element-begin link)
-                     (progn
-		       (goto-char
-			(org-element-end link))
-		       (unless (eolp) (skip-chars-backward " \t"))
-		       (point)))))
+          (let ((ov (or (cdr-safe (get-char-property-and-overlay
+                                   (org-element-begin link) 'org-image-overlay))
+                        (make-overlay
+                         (org-element-begin link)
+                         (progn
+		           (goto-char
+		            (org-element-end link))
+		           (unless (eolp) (skip-chars-backward " \t"))
+		           (point))))))
             (overlay-put ov 'modification-hooks
                          (list 'org-link-preview--remove-overlay))
             (push ov org-link-preview-overlays)
@@ -2124,13 +2136,13 @@ Previews are generated from the specs in
     (dolist (ov overlays)
       (when (memq ov org-link-preview-overlays)
         ;; Remove pending preview tasks between BEG and END
-        (when-let ((spec (cl-find ov org-link-preview--queue
-                                  :key #'cadr)))
+        (when-let* ((spec (cl-find ov org-link-preview--queue
+                                   :key #'cadr)))
           (setq org-link-preview--queue (delq spec org-link-preview--queue)))
         ;; Remove placed overlays between BEG and END
-        (when-let ((image (overlay-get ov 'display))
-                   ((imagep image)))
-          (image-flush image))
+        (when-let* ((image (overlay-get ov 'display)))
+          (when (if (fboundp 'imagep) (imagep image) (eq 'image (car-safe image)))
+            (image-flush image)))
         (setq org-link-preview-overlays (delq ov org-link-preview-overlays))
         (delete-overlay ov)))
     ;; Clear removed overlays.

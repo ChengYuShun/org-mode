@@ -161,7 +161,7 @@
     (:html-postamble-format nil nil org-html-postamble-format)
     (:html-preamble-format nil nil org-html-preamble-format)
     (:html-prefer-user-labels nil nil org-html-prefer-user-labels)
-    (:html-self-link-headlines nil nil org-html-self-link-headlines)
+    (:html-self-link-headlines nil "html-self-link-headlines" org-html-self-link-headlines)
     (:html-table-align-individual-fields
      nil nil org-html-table-align-individual-fields)
     (:html-table-caption-above nil nil org-html-table-caption-above)
@@ -233,10 +233,10 @@ For blocks that should contain headlines, use the HTML_CONTAINER
 property on the headline itself.")
 
 (defconst org-html-special-string-regexps
-  '(("\\\\-" . "&#x00ad;")		; shy
-    ("---\\([^-]\\)" . "&#x2014;\\1")	; mdash
-    ("--\\([^-]\\)" . "&#x2013;\\1")	; ndash
-    ("\\.\\.\\." . "&#x2026;"))		; hellip
+  '(("\\\\-" . "&shy;")
+    ("---\\([^-]\\)" . "&mdash;\\1")
+    ("--\\([^-]\\)" . "&ndash;\\1")
+    ("\\.\\.\\." . "&hellip;"))
   "Regular expressions for special string conversion.")
 
 (defvar org-html--id-attr-prefix "ID-"
@@ -332,7 +332,7 @@ This affects IDs that are determined from the ID property.")
   pre.src-haskell:before { content: 'Haskell'; }
   pre.src-hledger:before { content: 'hledger'; }
   pre.src-java:before { content: 'Java'; }
-  pre.src-js:before { content: 'Javascript'; }
+  pre.src-js:before { content: 'JavaScript'; }
   pre.src-latex:before { content: 'LaTeX'; }
   pre.src-ledger:before { content: 'Ledger'; }
   pre.src-lisp:before { content: 'Lisp'; }
@@ -1130,7 +1130,7 @@ org-info.js for your website."
              ((on . "&#x2611;") (off . "&#x2610;") (trans . "&#x2610;")))
     (ascii .
            ((on . "<code>[X]</code>")
-            (off . "<code>[&#xa0;]</code>")
+            (off . "<code>[&nbsp;]</code>")
             (trans . "<code>[-]</code>")))
     (html .
 	  ((on . "<input type='checkbox' checked='checked' />")
@@ -1651,7 +1651,7 @@ https://developer.mozilla.org/en-US/docs/Mozilla/Mobile/Viewport_meta_tag"
                              selector_eval_scheme: '.src-scheme',
                              selector: '.src-clojure',
                              selector_eval_ruby: '.src-ruby'};"
-  "Javascript snippet to activate klipse."
+  "JavaScript snippet to activate klipse."
   :group 'org-export-html
   :package-version '(Org . "9.1")
   :type 'string)
@@ -2346,7 +2346,7 @@ INFO is a plist containing export options."
 		       (concat (plist-get info :html-tag-class-prefix)
 			       (org-html-fix-class-name tag))
 		       tag))
-	     tags "&#xa0;"))))
+	     tags "&nbsp;"))))
 
 ;;;; Src Code
 
@@ -2872,7 +2872,7 @@ description of TODO, PRIORITY, TEXT, TAGS, and INFO arguments."
     (concat todo (and todo " ")
 	    priority (and priority " ")
 	    text
-	    (and tags "&#xa0;&#xa0;&#xa0;") tags)))
+	    (and tags "&nbsp;&nbsp;&nbsp") tags)))
 
 (defun org-html--container (headline info)
   "Return HTML container name for HEADLINE as a string.
@@ -3709,7 +3709,7 @@ contextual information."
 			      " data-editor-type=\"html\""
 			    "")
 			  code)
-		(format "<pre class=\"src src-%s\"%s>%s</pre>"
+		(format "<pre class=\"src src-%s\"%s><code>%s</code></pre>"
                         ;; Lang being nil is OK.
                         lang label code))))))
 
@@ -3763,7 +3763,7 @@ channel."
 			" align=\"%s\"" " class=\"org-%s\"")
 		    (org-export-table-cell-alignment table-cell info)))))
     (when (or (not contents) (string= "" (org-trim contents)))
-      (setq contents "&#xa0;"))
+      (setq contents "&nbsp;"))
     (cond
      ((and (org-export-table-has-header-p table info)
 	   (= 1 (org-export-table-row-group table-row info)))
@@ -3932,9 +3932,17 @@ information."
   "Transcode a TIMESTAMP object from Org to HTML.
 CONTENTS is nil.  INFO is a plist holding contextual
 information."
-  (let ((value (org-html-plain-text (org-timestamp-translate timestamp) info)))
+  (let* (
+         ;; Strip :post-blank
+         ;; It will be handled as a part of generic transcoder code
+         ;; so we should avoid double-counting post-blank.
+         (timestamp-no-blank
+          (org-element-put-property
+           (org-element-copy timestamp t)
+           :post-blank 0))
+         (value (org-html-plain-text (org-timestamp-translate timestamp-no-blank) info)))
     (format "<span class=\"timestamp-wrapper\"><span class=\"timestamp\">%s</span></span>"
-	    (replace-regexp-in-string "--" "&#x2013;" value))))
+	    (replace-regexp-in-string "--" "&ndash;" value))))
 
 ;;;; Underline
 
@@ -3964,7 +3972,7 @@ contextual information."
   (format "<p class=\"verse\">\n%s</p>"
 	  ;; Replace leading white spaces with non-breaking spaces.
 	  (replace-regexp-in-string
-	   "^[ \t]+" (lambda (m) (org-html--make-string (length m) "&#xa0;"))
+	   "^[ \t]+" (lambda (m) (org-html--make-string (length m) "&nbsp;"))
 	   ;; Replace each newline character with line break.  Also
 	   ;; remove any trailing "br" close-tag so as to avoid
 	   ;; duplicates.

@@ -215,11 +215,31 @@ take the date as an argument, and generate a list of pairs for
 types of datetrees (e.g. for lunar calendars, academic calendars,
 retail 4-4-5 calendars, etc).
 
+*** Source blocks fall back to Fundamental mode
+
+Org now falls back to Fundamental mode for source blocks when the
+appropriate major mode is unavailable.
+
+*** Graphviz Dot mode is used if available
+
+When editing Dot source blocks, Org now uses Graphviz Dot mode, if installed.
+
 ** New and changed options
 
 # Changes dealing with changing default values of customizations,
 # adding new customizations, or changing the interpretation of the
 # existing customizations.
+
+*** New context available to save in archived headings
+
+~org-archive-save-context-info~ can now contain ~olid~ symbol to save
+parent heading id in the archived heading.
+
+*** New hook ~org-archive-finalize-hook~
+
+Hook run after successfully archiving a subtree in final location.
+Unlike ~org-archive-hook~, which runs in the sourcce Org buffer, the
+new hook is called with point on the subtree in the destination file.
 
 *** ox-odt: New export option ~org-odt-with-forbidden-chars~
 
@@ -236,6 +256,14 @@ You may return to the previous behaviour by setting
 
 Note that Emacs warnings can always be suppressed by clicking on ⛔
 symbol or by customizing ~warning-suppress-types~.
+
+*** Allow using =xelatex= for LaTeX preview
+
+A new process =xelatex= is added to ~org-preview-process-alist~ to
+allow generating LaTeX fragment preview through =xdv= file produced by
+XeLaTeX, which has better support for Unicode.
+
+You can now set ~org-preview-latex-default-process~ to ~'xelatex~.
 
 *** New option ~org-edit-keep-region~
 
@@ -305,6 +333,16 @@ slide to specific animation steps.
 This text will be displayed on animation step 2 and later.
 #+END_SRC
 
+*** ox-html: Headline self links can be enabled from an Org-mode file
+
+Previously HTML export could add, to each headline, a link to itself.
+To enable it, you had to use the variable
+~org-html-self-link-headlines~.
+
+Now, it's also possible to enable it per Org-mode file by adding:
+: #+OPTIONS: html-self-link-headlines:t
+
+
 *** ox-latex: Table of contents generation has been fixed and augmented
 
 The LaTeX exporter differs from other exporters in that it *does not*
@@ -320,9 +358,44 @@ behaviour of other exporters. In this case, to exclude a section from
 the table of contents, mark it as =:UNNUMBERED: notoc= in its
 properties.
 
+*** New option ~org-cite-basic-complete-key-crm-separator~
+
+This option makes ~org-cite~'s ~basic~ insert processor use
+~completing-read-multiple~ instead of the default consecutive prompts.
+It can also be set to dynamically compute ~crm-separator~ so that the
+separator does not appear in completion candidates.
+
+*** New Option ~org-md-link-org-files-as-md~
+
+This option makes it possible to disable mapping of linked org files
+to markdown during export to Markdown. This is analogous to how
+~org-html-link-org-files-as-html~ works in export to HTML.
+
+*** ~org-yank-image-save-method~ can be a function producing directory name
+
+In previous versions, ~org-yank-image-save-method~ could be either a
+symbol ~attach~ or a string -- directory name.  Now it can also be a
+function, which will be called with no arguments and its return value
+will be used as a directory to save the image to.
+
 ** New functions and changes in function arguments
 
 # This also includes changes in function behavior from Elisp perspective.
+
+*** New function ~org-src-get-lang-mode-if-bound~
+
+The new function is like ~org-src-get-lang-mode~, except that it
+ensures the returned major mode for the given language is bound, and
+so available to the user.  If the mode is not bound, the function can
+optionally return a fallback mode and display a message when doing so.
+The function was added so that Org can fall back to Fundamental mode
+for source blocks where the appropriate major mode is unavailable.
+
+*** New function ~org-gnus-no-new-news-other-frame~ (to be used in ~org-link-frame-setup~)
+
+The new function is like ~org-gnus-no-new-news~, but always opens the
+link in other frame.
+
 
 *** New command ~org-link-preview~ to preview Org links
 
@@ -405,6 +478,15 @@ When CHILDREN contains ~nil~ elements, they are skipped.  This way,
 
 will yield expected results rather than assigning literal ~nil~ as a child.
 
+*** ~org-clock-get-clock-string~ now takes an optional ~max-length~ argument
+
+When a ~max-length~ is passed to ~org-clock-get-clock-string~, it will first
+attempt to truncate the headline and add an ellipsis in order to make the entire
+clock string fit under the length limit. If the length limit is too small to
+accommodate even a single character of the headline, after accounting for spaces
+and the surrounding parentheses, it will omit the headline entirely and just
+show as much of the clock as fits under the limit.
+
 ** Removed or renamed functions and variables
 
 *** ~org-cycle-display-inline-images~ is renamed to ~org-cycle-display-link-previews~
@@ -431,6 +513,34 @@ capture ~:tree-type~ options]], the internal variable
 undocumented helper function ~org-datetree-insert-line~.
 
 ** Miscellaneous
+*** ~org-capture~ target pointing to headline is now handled uniformly for =plain= entry type
+
+Previously, when using ~file+regexp~, ~file+function~ or ~function~, =plain= entries
+were inserted right at the point according to regexp/function, even when point is
+on an existing headline.
+
+Now, when target points to an existing headline, =plain= entries are
+inserted inside its body, honoring ~:prepend~ property.  This is more
+consistent with how ~item~, ~checkitem~, and ~table-line~ templates
+are handled.
+
+*** HTML export wraps ~<code>~ around all the exported src blocks
+
+HTML export always uses ~<pre>~ tag around exported src blocks.
+In addition, previously, HTML export used ~<code>~ tag around src
+blocks when ~org-html-klipsify-src~ is non-nil.
+
+Now, both ~<pre>~ and ~<code>~ tags are *always* wrapped around the
+export src blocks.
+
+*** ~org-element-org-data-parser~ now returns syntax node with ~:pre-blank~ property
+
+Previously, parsing ~org-data~ syntax node did not record information
+about blank lines at the beginning of the document.  Now, the number
+of blank lines is recorded in ~:pre-blank~ property.
+
+~org-element-org-data-interpreter~ takes into account this information.
+
 *** ~yank-media~ and DND handlers now honor the user option ~org-file-link-type~
 
 When inserting file: links, ~yank-media~ and DND handlers now respect
@@ -4763,9 +4873,12 @@ wget -c "https://ben.akrin.com/crackzor/crackzor_1.0.c.gz"
 #+end_example
 
 *** Add ~:session~ support of ob-js for js-comint
+
 #+begin_src js :session "*Javascript REPL*"
 console.log("stardiviner")
 #+end_src
+
+# SIC, JavaScript miscapitalized in `js-comint.el'.
 
 *** Add ~:session~ support of ob-js for Indium
 #+begin_src js :session "*JS REPL*"
@@ -6126,7 +6239,7 @@ the end of the string.
 
 *** Function ~org-info-export~ changes.
 
-HTML links created from certain info links now point to =gnu.org= URL's rather
+HTML links created from certain info links now point to =gnu.org= URLs rather
 than just to local files. For example info links such as =info:emacs#List
 Buffers= used to be converted to HTML links like this:
 

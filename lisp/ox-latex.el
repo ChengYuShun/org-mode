@@ -1524,7 +1524,7 @@ logfiles to remove, set `org-latex-logfiles-extensions'."
     ("Underfull \\hbox" . "[underfull hbox]")
     ("Overfull \\hbox" . "[overfull hbox]")
     ("Citation.*?undefined" . "[undefined citation]")
-    ("^!.+Unicode character" . "[unicode character(s) not set up for use with pdflatex. You can run lualatex or xelatex instead]")
+    ("^!.+Unicode character" . "[unicode character(s) not supported by pdflatex. Set org-latex-compiler to lualatex or xelatex instead]")
     ("Missing character: There is no" . "[Missing character(s): please load an appropriate font with the fontspec package]")
     ("Undefined control sequence" . "[undefined control sequence]"))
   "Alist of regular expressions and associated messages for the user.
@@ -4387,11 +4387,16 @@ Export is done in a buffer named \"*Org LATEX Export*\", which
 will be displayed when `org-export-show-temporary-export-buffer'
 is non-nil."
   (interactive)
-  (org-export-to-buffer 'latex "*Org LATEX Export*"
-    async subtreep visible-only body-only ext-plist
-    (if (fboundp 'major-mode-remap)
-        (major-mode-remap 'latex-mode)
-      #'LaTeX-mode)))
+  (defvar TeX-parse-self) ;; defined in tex.el
+  (let (;; FIXME: Working around LaTeX-mode being broken in non-file buffers.
+        ;; To be removed once we drop Emacs 30 and earlier, where the problem
+        ;; is not yet fixed.
+        (TeX-parse-self nil))
+    (org-export-to-buffer 'latex "*Org LATEX Export*"
+      async subtreep visible-only body-only ext-plist
+      (if (fboundp 'major-mode-remap)
+          (major-mode-remap 'latex-mode)
+        #'LaTeX-mode))))
 
 ;;;###autoload
 (defun org-latex-convert-region-to-latex ()

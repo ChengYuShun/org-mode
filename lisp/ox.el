@@ -185,6 +185,20 @@ BEHAVIOR determines how Org should handle multiple keywords for
 Values set through KEYWORD and OPTION have precedence over
 DEFAULT.
 
+When adding new export options to the alist, it is recommended to
+provide OPTION and/or KEYWORD depending on the allowed values for a
+given export option.  For example,
+ (:with-tags nil \"tags\" org-export-with-tags)
+takes short boolean values t/nil and can be succintly set as
+ #+OPTIONS: tags:t
+So, using OPTION makes more sense than forcing something like
+ #+WITH_TAGS: t
+
+On the other hand,
+ (:title \"TITLE\" nil nil parse)
+may have very long string value and may better be set on a separate line
+ #+TITLE: Some very long title that would not fit well into #+OPTIONS
+
 All these properties should be backend agnostic.  Backend
 specific properties are set through `org-export-define-backend'.
 Properties redefined there have precedence over these.")
@@ -520,10 +534,10 @@ t           Allow export of math snippets."
   :safe (lambda (x) (memq x '(t nil verbatim))))
 
 (defcustom org-export-headline-levels 3
-  "The last level which is still exported as a headline.
+  "This level and its ancestors will be exported as a headline.
 
-Inferior levels will usually produce itemize or enumerate lists
-when exported, but backend behavior may differ.
+Descendants of this level will usually produce itemized or
+enumerated lists when exported, but backend behavior may differ.
 
 This option can also be set with the OPTIONS keyword,
 e.g. \"H:2\"."
@@ -1444,11 +1458,15 @@ specific items to read, if any."
 	;; Priority is given to backend specific options.
 	(all (append (org-export-get-all-options backend)
 		     org-export-options-alist))
-	(plist))
+	(plist)
+        seen-options)
     (when line
       (dolist (entry all plist)
 	(let ((item (nth 2 entry)))
-	  (when item
+	  (when (and item
+                     ;; Only use the first option set by derived backend.
+                     (not (memq (car entry) seen-options)))
+            (push (car entry) seen-options)
 	    (let ((v (assoc-string item line t)))
 	      (when v (setq plist (plist-put plist (car entry) (cdr v)))))))))))
 
@@ -1480,12 +1498,17 @@ for export.  Return options as a plist."
 	 ;; Look for both general keywords and backend specific
 	 ;; options, with priority given to the latter.
 	 (options (append (org-export-get-all-options backend)
-			  org-export-options-alist)))
+			  org-export-options-alist))
+         seen-properties)
      ;; Handle other keywords.  Then return PLIST.
      (dolist (option options plist)
        (let ((property (car option))
 	     (keyword (nth 1 option)))
-	 (when keyword
+	 (when (and keyword
+                    ;; Only consider the first instance of property
+                    ;; In other words, derived backend settings take precendence.
+                    (not (memq property seen-properties)))
+           (push property seen-properties)
 	   (let ((value
 		  (or (cdr (assoc keyword cache))
 		      (let ((v (org-entry-get (point)
@@ -1521,10 +1544,18 @@ Assume buffer is in Org mode.  Narrowing, if any, is ignored."
     (let ((find-properties
 	   (lambda (keyword)
 	     ;; Return all properties associated to KEYWORD.
-	     (let (properties)
+	     (let (properties seen-properties)
 	       (dolist (option options properties)
-		 (when (equal (nth 1 option) keyword)
-		   (cl-pushnew (car option) properties)))))))
+                 ;; Ignore all but first :export-property
+                 ;; This is to avoid situations like
+                 ;; (:parent-backend-property "PARENT_KEYWORD" ...)
+                 ;; (:child-backend-property "CHILD_KEYWORD" ...)
+                 ;; where we should ignore #+PARENT_KEYWORD when child
+                 ;; backend is used.
+                 (unless (memq (car option) seen-properties)
+                   (push (car option) seen-properties)
+		   (when (equal (nth 1 option) keyword)
+		     (cl-pushnew (car option) properties))))))))
       ;; Read options in the current buffer and return value.
       (dolist (entry (org-collect-keywords
 		      (nconc (delq nil (mapcar #'cadr options))
@@ -1563,7 +1594,7 @@ Assume buffer is in Org mode.  Narrowing, if any, is ignored."
 		      (newline
 		       (mapconcat #'identity values "\n"))
 		      (split
-		       (cl-mapcan (lambda (v) (split-string v)) values))
+                       (cl-mapcan #'split-string values))
 		      ((t)
 		       (org-last values))
 		      (otherwise
@@ -3315,7 +3346,8 @@ variables in include file names."
           (when (org-element-type-p element 'keyword)
             (forward-line 0)
             ;; Extract arguments from keyword's value.
-            (let* ((value (org-element-property :value element))
+            (let* ((indentation (org-current-text-indentation))
+                   (value (org-element-property :value element))
                    (parameters (org-export-parse-include-value value dir))
                    (file (if expand-env
                              (substitute-env-in-file-name
@@ -3340,7 +3372,8 @@ variables in include file names."
                  :file-prefix file-prefix
                  :footnotes footnotes
                  :already-included included
-                 :expand-env expand-env)
+                 :expand-env expand-env
+                 :indentation indentation)
                 ;; Expand footnotes after all files have been
                 ;; included.  Footnotes are stored at end of buffer.
                 (unless included
@@ -3435,7 +3468,8 @@ provided as the :unmatched parameter."
 
 (cl-defun org-export--blindly-expand-include
     (parameters
-     &key includer-file file-prefix footnotes already-included expand-env)
+     &key includer-file file-prefix footnotes
+     already-included expand-env indentation)
   "Unconditionally include reference defined by PARAMETERS in the buffer.
 PARAMETERS is a plist of the form returned by `org-export-parse-include-value'.
 
@@ -3447,7 +3481,7 @@ which when provided allows footnotes to be handled appropriately.
 ALREADY-INCLUDED is a list of included names along with their
 line restriction which prevents recursion.  EXPAND-ENV is a flag to
 expand environment variables for #+INCLUDE keywords in the included
-file."
+file.  INDENTATION is the common indentation to be added."
   (let* ((coding-system-for-read
           (or (plist-get parameters :coding-system)
               coding-system-for-read))
@@ -3455,7 +3489,7 @@ file."
          (lines (plist-get parameters :lines))
          (args (plist-get parameters :args))
          (block (plist-get parameters :block))
-         (ind (org-current-text-indentation)))
+         (ind indentation))
     (cond
      ((eq (plist-get parameters :env) 'literal)
       (insert
@@ -6292,25 +6326,25 @@ them."
     ("Figure %d:"
      ("ar" :default "شكل %d:")
      ("cs" :default "Obrázek %d:")
-     ("da" :default "Figur %d")
+     ("da" :default "Figur %d:")
      ("de" :default "Abbildung %d:")
      ("es" :default "Figura %d:")
      ("et" :default "Joonis %d:")
      ("fa" :default "شکل %d:")
-     ("fr" :default "Figure %d :" :html "Figure&nbsp;%d&nbsp;:")
-     ("is" :default "Mynd %d")
+     ("fr" :default "Figure %d:" :html "Figure&nbsp;%d&nbsp;:")
+     ("is" :default "Mynd %d:")
      ("it" :default "Figura %d:")
-     ("ja" :default "図%d: " :html "&#22259;%d: ")
+     ("ja" :default "図%d:" :html "&#22259;%d:")
      ("nl" :default "Figuur %d:" :html "Figuur&nbsp;%d:")
-     ("no" :default "Illustrasjon %d")
-     ("nb" :default "Illustrasjon %d")
-     ("nn" :default "Illustrasjon %d")
-     ("pl" :default "Obrazek %d") ; alternatively "Rysunek %d"
+     ("no" :default "Illustrasjon %d:")
+     ("nb" :default "Illustrasjon %d:")
+     ("nn" :default "Illustrasjon %d:")
+     ("pl" :default "Obrazek %d:") ; alternatively "Rysunek %d"
      ("pt_BR" :default "Figura %d:")
      ("ro" :default "Imaginea %d:")
      ("ru" :html "&#1056;&#1080;&#1089;. %d.:" :utf-8 "Рис. %d.:")
-     ("sl" :default "Slika %d")
-     ("sv" :default "Illustration %d")
+     ("sl" :default "Slika %d:")
+     ("sv" :default "Illustration %d:")
      ("tr" :default "Şekil %d:")
      ("zh-CN" :html "&#22270;%d&nbsp;" :utf-8 "图%d "))
     ("Footnotes"
@@ -6418,24 +6452,24 @@ them."
     ("Listing %d:"
      ("ar" :default "برنامج %d:")
      ("cs" :default "Program %d:")
-     ("da" :default "Program %d")
-     ("de" :default "Programmlisting %d")
-     ("es" :default "Listado de programa %d")
-     ("et" :default "Loend %d")
+     ("da" :default "Program %d:")
+     ("de" :default "Programmlisting %d:")
+     ("es" :default "Listado de programa %d:")
+     ("et" :default "Loend %d:")
      ("fa" :default "برنامه‌ریزی %d:")
-     ("fr" :default "Programme %d :" :html "Programme&nbsp;%d&nbsp;:")
-     ("it" :default "Listato %d :")
+     ("fr" :default "Programme %d:" :html "Programme&nbsp;%d&nbsp;:")
+     ("it" :default "Listato %d:")
      ("ja" :default "ソースコード%d:")
      ("nl" :default "Programma %d:" :html "Programma&nbsp;%d:")
      ("nn" :default "Program %d:")
-     ("no" :default "Dataprogram %d")
-     ("nb" :default "Dataprogram %d")
-     ("ro" :default "Lista %d")
+     ("no" :default "Dataprogram %d:")
+     ("nb" :default "Dataprogram %d:")
+     ("ro" :default "Lista %d:")
      ("pl" :default "Indeks %d:")
      ("pt_BR" :default "Listagem %d:")
      ("ru" :html "&#1056;&#1072;&#1089;&#1087;&#1077;&#1095;&#1072;&#1090;&#1082;&#1072; %d.:"
       :utf-8 "Распечатка %d.:")
-     ("sl" :default "Izpis programa %d")
+     ("sl" :default "Izpis programa %d:")
      ("sv" :default "Programlistning %d:")
      ("tr" :default "Program %d:")
      ("zh-CN" :html "&#20195;&#30721;%d&nbsp;" :utf-8 "代码%d "))
@@ -6554,27 +6588,27 @@ them."
     ("Table %d:"
      ("ar" :default "جدول %d:")
      ("cs" :default "Tabulka %d:")
-     ("da" :default "Tabel %d")
-     ("de" :default "Tabelle %d")
-     ("es" :default "Tabla %d")
-     ("et" :default "Tabel %d")
-     ("fa" :default "جدول %d")
-     ("fr" :default "Tableau %d :")
-     ("is" :default "Tafla %d")
+     ("da" :default "Tabel %d:")
+     ("de" :default "Tabelle %d:")
+     ("es" :default "Tabla %d:")
+     ("et" :default "Tabel %d:")
+     ("fa" :default "جدول %d:")
+     ("fr" :default "Tableau %d:")
+     ("is" :default "Tafla %d:")
      ("it" :default "Tabella %d:")
      ("ja" :default "表%d:" :html "&#34920;%d:")
      ("nl" :default "Tabel %d:" :html "Tabel&nbsp;%d:")
-     ("no" :default "Tabell %d")
-     ("nb" :default "Tabell %d")
-     ("nn" :default "Tabell %d")
-     ("pl" :default "Tabela %d")
+     ("no" :default "Tabell %d:")
+     ("nb" :default "Tabell %d:")
+     ("nn" :default "Tabell %d:")
+     ("pl" :default "Tabela %d:")
      ("pt_BR" :default "Tabela %d:")
-     ("ro" :default "Tabel %d")
+     ("ro" :default "Tabel %d:")
      ("ru" :html "&#1058;&#1072;&#1073;&#1083;&#1080;&#1094;&#1072; %d.:"
       :utf-8 "Таблица %d.:")
-     ("sl" :default "Tabela %d")
+     ("sl" :default "Tabela %d:")
      ("sv" :default "Tabell %d:")
-     ("tr" :default "Tablo %d")
+     ("tr" :default "Tablo %d:")
      ("zh-CN" :html "&#34920;%d&nbsp;" :utf-8 "表%d "))
     ("Table of Contents"
      ("ar" :default "قائمة المحتويات")
@@ -6688,7 +6722,7 @@ to `:default' encoding.  If it fails, return S."
   "Call function FUN on the results returned by BODY evaluation.
 
 FUN is an anonymous function of one argument.  BODY should be a valid
-ELisp source expression.  BODY evaluation happens in an asynchronous process,
+Elisp source expression.  BODY evaluation happens in an asynchronous process,
 from a buffer which is an exact copy of the current one.
 
 Use `org-export-add-to-stack' in FUN in order to register results
@@ -7318,14 +7352,14 @@ back to standard interface."
 			     (lambda (sub-entry)
 			       (cl-incf index)
 			       (format
-				(if (zerop (mod index 2)) "    [%s] %-26s"
+				(if (cl-evenp index) "    [%s] %-26s"
 				  "[%s] %s\n")
 				(funcall fontify-key
 					 (char-to-string (car sub-entry))
 					 top-key)
 				(nth 1 sub-entry)))
 			     sub-menu "")
-			    (when (zerop (mod index 2)) "\n"))))))))
+			    (when (cl-evenp index) "\n"))))))))
 		entries ""))
 	     ;; Publishing menu is hard-coded.
 	     (format "\n[%s] Publish

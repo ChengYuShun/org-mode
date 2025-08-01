@@ -37,7 +37,7 @@
 
 ;; Checks currently implemented report the following:
 
-;; - duplicates CUSTOM_ID properties,
+;; - duplicate CUSTOM_ID properties,
 ;; - duplicate NAME values,
 ;; - duplicate targets,
 ;; - duplicate footnote definitions,
@@ -563,9 +563,8 @@ Use :header-args: instead"
     (lambda (b)
       (when-let* ((lang (org-element-property :language b)))
         (unless (or (functionp (intern (format "org-babel-execute:%s" lang)))
-                    ;; No babel backend, but there is corresponding
-                    ;; major mode.
-                    (fboundp (org-src-get-lang-mode lang)))
+                    ;; No Babel backend, but relevant major mode is bound.
+                    (org-src-get-lang-mode-if-bound lang))
 	  (list (org-element-property :post-affiliated b)
 	        (format "Unknown source block language: '%s'" lang)))))))
 
@@ -1411,7 +1410,10 @@ Use \"export %s\" instead"
                            (org-export-resolve-link (car result) `(:parse-tree ,ast))
                          (org-link-broken nil))
                      (org-export-get-previous-element el nil))))
-        (when (org-element-type-p origin-block 'src-block)
+        (when (and (org-element-type-p origin-block 'src-block)
+                   (pcase-let ((`(,_ ,_ ,args . ,_)
+                                (org-babel-get-src-block-info 'light origin-block)))
+                     (not (member (alist-get :exports args) '("results" "both")))))
           (list (org-element-begin el)
                 (format "Links to \"%s\" will not be valid during export unless the parent source block has :exports results or both" result-name)))))))
 
@@ -1588,7 +1590,7 @@ AST is the buffer parse tree."
   #'org-lint-misplaced-heading :trust 'low)
 
 (org-lint-add-checker 'duplicate-custom-id
-  "Report duplicates CUSTOM_ID properties"
+  "Report duplicate CUSTOM_ID properties"
   #'org-lint-duplicate-custom-id
   :categories '(link))
 

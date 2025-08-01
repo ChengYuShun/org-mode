@@ -1171,6 +1171,7 @@ STRING width.  When REFERENCE-FACE is nil, `default' face is used."
       (org--string-width-1 string)
     ;; Wrap/line prefix will make `window-text-pixel-size' return too
     ;; large value including the prefix.
+    (setq string (copy-sequence string)) ; do not modify STRING object
     (remove-text-properties 0 (length string)
                             '(wrap-prefix t line-prefix t)
                             string)
@@ -1199,7 +1200,7 @@ STRING width.  When REFERENCE-FACE is nil, `default' face is used."
                      (push el result)))
                  result)))
           (current-char-property-alias-alist char-property-alias-alist))
-      (with-current-buffer (get-buffer-create " *Org string width*")
+      (with-current-buffer (get-buffer-create " *Org string width*" t)
         (setq-local display-line-numbers nil)
         (setq-local line-prefix nil)
         (setq-local wrap-prefix nil)
@@ -1237,7 +1238,9 @@ This function forces `tab-width' value because it is used as a part of
 the parser, to ensure parser consistency when calculating list
 indentation."
   `(progn
-     (unless (= 8 tab-width) (error "Tab width in Org files must be 8, not %d.  Please adjust your `tab-width' settings for Org mode" tab-width))
+     (unless (= 8 tab-width)
+       (org--set-tab-width)
+       (warn "Tab width in Org files must be 8, not %d.  Setting back to 8.  Please adjust your `tab-width' settings for Org mode" tab-width))
      (string-width (buffer-substring-no-properties
                     (line-beginning-position) (point)))))
 
@@ -1710,18 +1713,25 @@ it for output."
                         (file-relative-name source pwd))
                     source))
          (log-buf (and log-buf (get-buffer-create log-buf)))
-         (time (file-attribute-modification-time (file-attributes output))))
+         exit-status (did-error nil))
     (save-window-excursion
       (dolist (command commands)
         (cond
          ((functionp command)
+          ;; We could treat return value of the function
+          ;; as return code in shell command, but that would be
+          ;; a breaking changed compared to historical behavior.
+          ;; Functions might still take care to remove the target file
+          ;; (if it already exists) to mark failure.
           (funcall command (shell-quote-argument relname)))
          ((stringp command)
           (let ((shell-command-dont-erase-buffer t))
-            (shell-command command log-buf))))))
+            (setq exit-status (shell-command command log-buf))
+            (when (and (numberp exit-status) (> exit-status 0))
+              (setq did-error t)))))))
     ;; Check for process failure.  Output file is expected to be
     ;; located in the same directory as SOURCE.
-    (unless (org-file-newer-than-p output time)
+    (when (or did-error (not (file-exists-p output)))
       (ignore (defvar org-batch-test))
       ;; Display logs when running tests.
       (when (bound-and-true-p org-batch-test)
@@ -1820,6 +1830,15 @@ indirectly called by the latter."
                (or (not (alist-get 'same-frame alist))
                    (eq (window-frame) (window-frame window))))
       (window--display-buffer buffer window 'reuse alist))))
+
+(defun org-base-buffer-file-name (&optional buffer)
+  "Resolve the base file name for the provided BUFFER.
+If BUFFER is not provided, default to the current buffer.  If
+BUFFER does not have a file name associated with it (e.g. a
+transient buffer) then return nil."
+  (if-let* ((base-buffer (buffer-base-buffer buffer)))
+      (buffer-file-name base-buffer)
+    (buffer-file-name buffer)))
 
 (provide 'org-macs)
 

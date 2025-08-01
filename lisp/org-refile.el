@@ -104,7 +104,7 @@ are used, equivalent to the value `((nil . (:level . 1)))'."
 	   (choice :value org-agenda-files
 		   (const :tag "All agenda files" org-agenda-files)
 		   (const :tag "Current buffer" nil)
-		   (function) (variable) (file))
+		   (function) (variable) (file) (repeat (file)))
 	   (choice :tag "Identify target headline by"
 		   (cons :tag "Specific tag" (const :value :tag) (string))
 		   (cons :tag "TODO keyword" (const :value :todo) (string))
@@ -372,7 +372,8 @@ When `org-refile-use-cache' is nil, just return POS."
 		        (let ((re (format org-complex-heading-regexp-format
 					  (regexp-quote heading)))
 			      (target
-			       (if (not org-refile-use-outline-path) heading
+			       (if (not org-refile-use-outline-path)
+                                   (org-link-display-format heading)
 			         (mapconcat
 				  #'identity
 				  (append
@@ -780,9 +781,7 @@ this function appends the default value from
 			 (all-completions string thetable predicate))))
               ((eq (car-safe flag) 'boundaries)
                ;; See `completion-file-name-table'.
-               (let ((start (or (and (string-match "/" string)
-                                     (match-beginning 0))
-                                (length string)))
+               (let ((start 0)
                      (end (and (string-match "/" (cdr flag))
                                (match-beginning 0))))
                  `(boundaries ,start . ,end)))

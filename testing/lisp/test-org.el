@@ -1184,14 +1184,16 @@ Otherwise, evaluate RESULT as an sexp and return its result."
     (org-test-with-temp-text "* H\n[fn:1] Definition\n\n\n\n<point>"
       (let ((org-adapt-indentation t)) (org-indent-line))
       (org-get-indentation))))
-  ;; After the end of the contents of a greater element, indent like
-  ;; the beginning of the element.
-  (should
-   (= 1
-      (org-test-with-temp-text
-	  " #+BEGIN_CENTER\n  Contents\n<point>#+END_CENTER"
-	(org-indent-line)
-	(org-get-indentation))))
+  ;; After the end of the contents of a greater element or other
+  ;; block, indent like the beginning of the element.
+  (mapcar (lambda (type)
+	    (should
+	     (= 1
+		(org-test-with-temp-text
+		    (format " #+BEGIN_%1$s\n  Contents\n<point>#+END_%1$s" type)
+		  (org-indent-line)
+		  (current-indentation)))))
+	  '("CENTER" "COMMENT" "EXAMPLE" "EXPORT" "SRC" "VERSE"))
   ;; On blank lines after a paragraph, indent like its last non-empty
   ;; line.
   (should
@@ -1220,8 +1222,9 @@ Otherwise, evaluate RESULT as an sexp and return its result."
 	 (org-indent-line)
 	 (org-get-indentation)))))
   ;; Within code part of a source block, use language major mode if
-  ;; `org-src-tab-acts-natively' is non-nil.  Otherwise, indent
-  ;; according to line above.
+  ;; `org-src-tab-acts-natively' is non-nil, only add
+  ;; `org-edit-src-content-indentation' to lines with indentation that
+  ;; is lower. Otherwise, indent according to line above.
   (should
    (= 6
       (org-test-with-temp-text
@@ -1229,6 +1232,15 @@ Otherwise, evaluate RESULT as an sexp and return its result."
 	(let ((org-src-tab-acts-natively t)
 	      (org-edit-src-content-indentation 0))
 	  (org-indent-line))
+	(org-get-indentation))))
+  (should
+   (= 2
+      (org-test-with-temp-text
+	  "#+BEGIN_SRC emacs-lisp\n  (and A\n<point>B)\n#+END_SRC"
+	(let ((org-src-tab-acts-natively t)
+	      (org-edit-src-content-indentation 2))
+	  (org-indent-line))
+        (forward-line -1)
 	(org-get-indentation))))
   (should
    (= 1
@@ -3845,6 +3857,21 @@ Foo Bar
 	    (org-sort-entries nil ?O)
 	    (buffer-string))))
   ;; Sort by priority.
+  (should
+   (equal "#+PRIORITIES: 0 9 9
+* TODO [#0] Bob
+* TODO [#1] Perci
+* TODO Tim
+"
+	  (org-test-with-temp-text
+	      "#+PRIORITIES: 0 9 9
+* TODO [#0] Bob
+* TODO Tim
+* TODO [#1] Perci
+"
+            (org-set-regexps-and-options)
+	    (org-sort-entries nil ?p)
+	    (buffer-string))))
   (should
    (equal "\n* [#A] h2\n* [#B] h3\n* [#C] h1\n"
 	  (org-test-with-temp-text
@@ -8783,7 +8810,7 @@ SCHEDULED: <2021-06-16 " (1+ (not space)) " +1d>
           "* TODO Read book
 SCHEDULED: <2021-06-15 Tue +1d>"
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string))))))
 
@@ -8798,7 +8825,7 @@ SCHEDULED: <2021-06-15 Tue +1d>"
       (org-test-with-temp-text
           "* TODO task"
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string)))))
   ;; `time' value.
@@ -8816,7 +8843,7 @@ CLOSED: %s"
       (org-test-with-temp-text
           "* TODO task"
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string)))))
   (should
@@ -8833,7 +8860,7 @@ CLOSED: %s"
       (org-test-with-temp-text
           "* TODO task"
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string)))))
   ;; TODO: Test `note' value.
@@ -8849,7 +8876,7 @@ CLOSED: %s"
 <point>* TODO task"
         (org-set-regexps-and-options)
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string)))))
   (should
@@ -8869,7 +8896,7 @@ CLOSED: %s"
 <point>* TODO task"
         (org-set-regexps-and-options)
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string)))))
   ;; Test local property overrides.
@@ -8887,7 +8914,7 @@ CLOSED: %s"
 :LOGGING: nil
 :END:"
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string)))))
   (should
@@ -8910,7 +8937,7 @@ CLOSED: %s
 :LOGGING: logdone
 :END:"
         (org-todo "DONE")
-        (when (memq 'org-add-log-note post-command-hook)
+        (when (memq 'org-add-log-note (default-value 'post-command-hook))
           (org-add-log-note))
         (buffer-string))))))
 
@@ -8943,7 +8970,7 @@ CLOSED: %s
             (progn
               (org-todo '(4))
               (should (string-match-p "DONE" (buffer-string)))
-              (should (member #'org-add-log-note post-command-hook))
+              (should (member #'org-add-log-note (default-value 'post-command-hook)))
               (if (eq org-inhibit-logging 'note)
                   (should (eq org-log-note-how 'time))
                 (should (eq org-log-note-how 'note))))
@@ -8982,6 +9009,14 @@ CLOSED: %s
        (org-test-with-temp-text "<2012-03-29 T<point>hu>"
 	 (org-at-timestamp-p))))
   (should
+   (eq 'hour
+       (org-test-with-temp-text "<2012-03-29 Thu <point>12:34>"
+	 (org-at-timestamp-p))))
+  (should
+   (eq 'minute
+       (org-test-with-temp-text "<2012-03-29 Thu 12:<point>34>"
+	 (org-at-timestamp-p))))
+  (should
    (wholenump
     (org-test-with-temp-text "<2012-03-29 Thu +2<point>y>"
       (org-at-timestamp-p))))
@@ -8992,6 +9027,23 @@ CLOSED: %s
   (should
    (eq 'after
        (org-test-with-temp-text "<2012-03-29 Thu><point>»"
+	 (org-at-timestamp-p))))
+  ;; Test optional weekday name.
+  (should
+   (eq 'day
+       (org-test-with-temp-text "<2012-03-2<point>9>"
+	 (org-at-timestamp-p))))
+  (should
+   (eq 'day
+       (org-test-with-temp-text "<2012-03-29<point> 12:34>"
+	 (org-at-timestamp-p))))
+  (should
+   (eq 'hour
+       (org-test-with-temp-text "<2012-03-29 <point>12:34>"
+	 (org-at-timestamp-p))))
+  (should
+   (eq 'minute
+       (org-test-with-temp-text "<2012-03-29 12:<point>34>"
 	 (org-at-timestamp-p))))
   ;; Test `inactive' optional argument.
   (should
@@ -9054,6 +9106,45 @@ CLOSED: %s
   (should
    (org-test-with-temp-text "# [2012-03-29 Thu]<point>"
      (org-at-timestamp-p 'lax))))
+
+(ert-deftest test-org/org-timestamp-change ()
+  "Test `org-timestamp-change' specifications."
+  (let ((now (current-time)) now-ts point)
+    (message "Testing with timestamps <%s> and <%s>"
+             (format-time-string (car org-timestamp-formats) now)
+             (format-time-string (cdr org-timestamp-formats) now))
+    ;; loop over regular timestamp formats and weekday-less timestamp
+    ;; formats
+    (dolist (org-timestamp-formats
+             (list org-timestamp-formats
+                   (cons (replace-regexp-in-string
+                          " %a" "" (car org-timestamp-formats))
+                         (replace-regexp-in-string
+                           " %a" "" (cdr org-timestamp-formats)))))
+      ;; loop over timestamps that do not and do contain time
+      (dolist (format (list (car org-timestamp-formats)
+                            (cdr org-timestamp-formats)))
+        (setq now-ts
+              (concat "<" (format-time-string format now) ">"))
+        (org-test-with-temp-text now-ts
+          (forward-char 1)
+          (while (not (eq (char-after) ?>))
+            (skip-syntax-forward "-")
+            ;; change the timestamp unit at point one down, two up,
+            ;; one down, which should give us the original timestamp
+            ;; again.  However, point can move backward during that
+            ;; operation, so take care of that.  *Not* using
+            ;; `save-excursion', which fails to restore point since
+            ;; the timestamp gets completely replaced.
+            (setq point (point))
+            (org-timestamp-change -1 nil nil nil)
+            (org-timestamp-change  2 nil nil nil)
+            (org-timestamp-change -1 nil nil nil)
+            (goto-char point)
+            (should (string=
+                     (buffer-substring (point-min) (point-max))
+                     now-ts))
+            (forward-char 1)))))))
 
 (ert-deftest test-org/timestamp ()
   "Test `org-timestamp' specifications."

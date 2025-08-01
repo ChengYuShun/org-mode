@@ -269,7 +269,7 @@ matching a regular expression."
 	       (or (cdr (assq :tangle (nth 2 (org-babel-get-src-block-info 'no-eval))))
 		   (user-error "Point is not in a source code block"))))
 	    path-collector
-            (source-file buffer-file-name))
+            (source-file (org-base-buffer-file-name)))
 	(mapc ;; map over file-names
 	 (lambda (by-fn)
 	   (let ((file-name (car by-fn)))
@@ -290,8 +290,8 @@ matching a regular expression."
 			     (tangle-mode (funcall get-spec :tangle-mode)))
 		        (unless (string-equal block-lang lang)
 			  (setq lang block-lang)
-			  (let ((lang-f (org-src-get-lang-mode lang)))
-			    (when (fboundp lang-f) (ignore-errors (funcall lang-f)))))
+                          (when-let* ((lang-f (org-src-get-lang-mode-if-bound lang)))
+                            (ignore-errors (funcall lang-f))))
 		        ;; if file contains she-bangs, then make it executable
 		        (when she-bang
 			  (unless tangle-mode (setq tangle-mode #o755)))

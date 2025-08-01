@@ -183,10 +183,12 @@ type         The type of entry.  Valid types are:
                plain       text to be inserted as it is.
 
 target       Specification of where the captured item should be placed.
-             In Org files, targets usually define a node.  Entries will
-             become children of this node, other types will be added to the
-             table or list in the body of this node.
+             In Org files, targets usually define a node.  Entries
+             (type `entry') will become children of this node, other
+             types will be added to the table or list in the body of
+             this node.
 
+             <file-spec>
              Most target specifications contain a file name.  If that file
              name is the empty string, it defaults to `org-default-notes-file'.
              A file can also be given as a variable or as a function called
@@ -195,48 +197,72 @@ target       Specification of where the captured item should be placed.
 
              Valid values are:
 
-             (file \"path/to/file\")
+             (file <file-spec>)
                  Text will be placed at the beginning or end of that file
 
              (id \"id of existing Org entry\")
                  File as child of this entry, or in the body of the entry
 
-             (file+headline \"path/to/file\" \"node headline\")
-             (file+headline \"path/to/file\" function-returning-string)
-             (file+headline \"path/to/file\" symbol-containing-string)
+             (file+headline <file-spec> \"node headline\")
+             (file+headline <file-spec> function-returning-string)
+             (file+headline <file-spec> symbol-containing-string)
                  Fast configuration if the target heading is unique in the file
 
-             (file+olp \"path/to/file\" \"Level 1 heading\" \"Level 2\" ...)
-             (file+olp \"path/to/file\" function-returning-list-of-strings)
-             (file+olp \"path/to/file\" symbol-containing-list-of-strings)
+             (file+olp <file-spec> \"Level 1 heading\" \"Level 2\" ...)
+             (file+olp <file-spec> function-returning-list-of-strings)
+             (file+olp <file-spec> symbol-containing-list-of-strings)
                  For non-unique headings, the full outline path is safer
 
-             (file+regexp  \"path/to/file\" \"regexp to find location\")
-                 File to the entry matching regexp
+             (file+regexp  <file-spec> \"regexp to find location\")
+                 File to the entry containing matching regexp
 
-             (file+olp+datetree \"path/to/file\" \"Level 1 heading\" ...)
-             (file+olp+datetree
-               \"path/to/file\" function-returning-list-of-strings)
-             (file+olp+datetree
-               \"path/to/file\" symbol-containing-list-of-strings)
+             (file+olp+datetree <file-spec> \"Level 1 heading\" ...)
+             (file+olp+datetree <file-spec> function-returning-list-of-strings)
+             (file+olp+datetree <file-spec> symbol-containing-list-of-strings)
                  Will create a heading in a date tree for today's date.
                  If no heading is given, the tree will be on top level.
                  To prompt for date instead of using TODAY, use the
                  :time-prompt property.  To create a week-tree, use the
                  :tree-type property.
 
-             (file+function \"path/to/file\" function-finding-location)
+             (file+function <file-spec> function-finding-location)
                  A function to find the right location in the file
 
              (clock)
                 File to the entry that is currently being clocked
 
              (here)
-                The position of point
+                The exact position to insert the template
 
              (function function-finding-location)
                 Most general way: write your own function which both visits
                 the file and moves point to the right location
+
+
+             For (here) target, the template will be always inserted
+             in place.
+
+             When the target points to headline, the template will
+             be inserted into the headline body (for non-`entry' types)
+             or as an immediate child.
+
+             When the target points to text inside heading body, the
+             exact place where the template will be inserted depends
+             on its type:
+
+             entry      will be inserted as a child of the Org
+                        heading the point is in.
+
+             item,      will be inserted in the nearest existing Org
+             checkitem  list, if there is one.  The list will be
+                        searched from the point to the end of current
+                        heading body.
+
+             table-line will be inserted into the nearest table, if any
+                        searching from point to the end of current
+                        heading body.
+
+             plain      plain text will be inserted in place.
 
 template     The template for creating the capture item.
              If it is an empty string or nil, a default template based on
@@ -477,6 +503,8 @@ you can escape ambiguous cases with a backward slash, e.g., \\%i."
 				  (function :tag "  Function"))
 			    (list :tag "Current clocking task"
 				  (const :format "" clock))
+                            (list :tag "The position at point"
+				  (const :format "" here))
 			    (list :tag "Function"
 				  (const :format "" function)
 				  (function :tag "  Function")))
@@ -633,21 +661,29 @@ key for the capture template otherwise associated with \"d\".
 to avoid duplicates.)"
   :version "24.3"
   :group 'org-capture
-  :type '(repeat (list :tag "Rule"
-		       (string :tag "        Capture key")
-		       (string :tag "Replace by template")
-		       (repeat :tag "Available when"
-			       (choice
-			        (cons :tag "Condition"
-				      (choice
-				       (const :tag "In file" in-file)
-				       (const :tag "Not in file" not-in-file)
-				       (const :tag "In buffer" in-buffer)
-				       (const :tag "Not in buffer" not-in-buffer)
-				       (const :tag "In mode" in-mode)
-				       (const :tag "Not in mode" not-in-mode))
-				      (regexp))
-			        (function :tag "Custom function"))))))
+  :type
+  (let ((available-when
+         '(repeat :tag "Available when"
+		  (choice
+		   (cons :tag "Condition"
+			 (choice
+			  (const :tag "In file" in-file)
+			  (const :tag "Not in file" not-in-file)
+			  (const :tag "In buffer" in-buffer)
+			  (const :tag "Not in buffer" not-in-buffer)
+			  (const :tag "In mode" in-mode)
+			  (const :tag "Not in mode" not-in-mode))
+			 (regexp))
+		   (function :tag "Custom function")))))
+    `(repeat
+      (choice
+       (list :tag "Short rule"
+	     (string :tag "        Capture key")
+	     ,available-when)
+       (list :tag "Full rule"
+	     (string :tag "        Capture key")
+	     (string :tag "Replace by template")
+	     ,available-when)))))
 
 (defcustom org-capture-use-agenda-date nil
   "Non-nil means use the date at point when capturing from agendas.
@@ -681,7 +717,7 @@ When called with a `C-0' (zero) prefix, insert a template at point.
 When called with a `C-1' (one) prefix, force prompting for a date when
 a datetree entry is made.
 
-ELisp programs can set KEYS to a string associated with a template
+Elisp programs can set KEYS to a string associated with a template
 in `org-capture-templates'.  In this case, interactive selection
 will be bypassed.
 
@@ -816,7 +852,7 @@ captured item after finalizing."
   (when (and org-capture-clock-was-started
 	     (equal org-clock-marker org-capture-clock-was-started))
     ;; Looks like the clock we started is still running.
-    (if org-capture-clock-keep
+    (if (and org-capture-clock-keep (not org-note-abort))
 	;; User may have completed clocked heading from the template.
 	;; Refresh clock mode line.
 	(org-clock-update-mode-line t)
@@ -1137,7 +1173,7 @@ Store them in the capture property list."
                     (org-encode-time
                      (apply #'list
                             0 0 org-extend-today-until
-                            (cl-cdddr (decode-time prompt-time))))))
+                            (cdddr (decode-time prompt-time))))))
 		 (time-to-days prompt-time)))
 	      (t
 	       ;; Current date, possibly corrected for late night
@@ -1295,7 +1331,12 @@ may have been stored before."
           (org-fold-region (max 1 (1- (point-max))) (point-max) nil))))
     (let ((origin (point-marker)))
       (unless (bolp) (insert "\n"))
-      (org-capture-empty-lines-before)
+      (org-capture-empty-lines-before
+       (or (org-capture-get :empty-lines-before)
+	   (org-capture-get :empty-lines)
+           (when (and (org--blank-before-heading-p)
+                      (not (org-previous-line-empty-p)))
+             1)))
       (let ((beg (point)))
 	(save-restriction
 	  (when insert-here? (narrow-to-region beg beg))
@@ -1374,6 +1415,8 @@ may have been stored before."
 	(org-capture-empty-lines-before
 	 (and item
 	      (not prepend?)
+              ;; FIXME: We should obey `org-blank-before-new-entry'
+              ;; when :empty-lines* is not given.
 	      (min 1 (or (org-capture-get :empty-lines-before)
 			 (org-capture-get :empty-lines)
 			 0)))))
@@ -1509,7 +1552,7 @@ the text of the entry, before the first child.  If not, place the
 template at the beginning or end of the file.
 Of course, if exact position has been required, just put it there."
   (cond
-   ((org-capture-get :exact-position)
+   ((org-capture-get :insert-here)
     (goto-char (org-capture-get :exact-position)))
    ((org-capture-get :target-entry-p)
     ;; Place the text into this entry.
@@ -1518,6 +1561,8 @@ Of course, if exact position has been required, just put it there."
 	(org-end-of-meta-data t)
       ;; Go to end of the entry text, before the next headline.
       (outline-next-heading)))
+   ((org-capture-get :exact-position)
+    (goto-char (org-capture-get :exact-position)))
    (t
     ;; Beginning or end of file.
     (goto-char (if (org-capture-get :prepend) (point-min) (point-max)))))
@@ -2014,7 +2059,7 @@ placeholder to check."
     (goto-char (match-beginning 0))
     (let ((n (abs (skip-chars-backward "\\\\"))))
       (delete-char (/ (1+ n) 2))
-      (= (% n 2) 1))))
+      (cl-oddp n))))
 
 (defun org-capture-expand-embedded-elisp (&optional mark)
   "Evaluate embedded elisp %(sexp) and replace with the result.

@@ -338,6 +338,12 @@ specially in `org-element--object-lex'.")
   (append org-element-recursive-objects '(paragraph table-row verse-block))
   "List of object or element types that can directly contain objects.")
 
+(defconst org-element-elements-no-affiliated
+  '(org-data comment clock headline inlinetask item
+             node-property planning property-drawer
+             section table-row)
+  "List of paragraph-level node types that cannot have affiliated keywords.")
+
 (defconst org-element-affiliated-keywords
   '("CAPTION" "DATA" "HEADER" "HEADERS" "LABEL" "NAME" "PLOT" "RESNAME" "RESULT"
     "RESULTS" "SOURCE" "SRCNAME" "TBLNAME")
@@ -1586,8 +1592,8 @@ Alter DATA by side effect."
   "Parse org-data.
 
 Return a new syntax node of `org-data' type containing `:begin',
-`:contents-begin', `:contents-end', `:end', `:post-blank',
-`:post-affiliated', and `:path' properties."
+`:pre-blank', `:contents-begin', `:contents-end', `:end',
+`:post-blank', `:post-affiliated', and `:path' properties."
   (org-with-wide-buffer
    (let* ((begin 1)
           (contents-begin (progn
@@ -1618,6 +1624,7 @@ Return a new syntax node of `org-data' type containing `:begin',
             :end end
             :robust-begin robust-begin
             :robust-end robust-end
+            :pre-blank (count-lines begin contents-begin)
             ;; Trailing blank lines in org-data, headlines, and
             ;; sections belong to the containing elements.
             :post-blank 0
@@ -1627,10 +1634,12 @@ Return a new syntax node of `org-data' type containing `:begin',
             :buffer (current-buffer)
             :deferred org-element--get-global-node-properties)))))
 
-(defun org-element-org-data-interpreter (_ contents)
+(defun org-element-org-data-interpreter (org-data contents)
   "Interpret ORG-DATA element as Org syntax.
 CONTENTS is the contents of the element."
-  contents)
+  (concat
+   (make-string (or (org-element-property :pre-blank org-data) 0) ?\n)
+   contents))
 
 ;;;; Inlinetask
 
@@ -2655,11 +2664,13 @@ Assume point is at the beginning of the fixed-width area."
   (save-excursion
     (let* ((begin (car affiliated))
 	   (post-affiliated (point))
+           pos-before-blank
 	   (end-area
 	    (progn
 	      (while (and (< (point) limit)
 			  (looking-at-p "[ \t]*:\\( \\|$\\)"))
 		(forward-line))
+              (setq pos-before-blank (point))
 	      (if (bolp) (line-end-position 0) (point))))
 	   (end (progn (skip-chars-forward " \r\t\n" limit)
 		       (if (eobp) (point) (line-beginning-position)))))
@@ -2672,7 +2683,7 @@ Assume point is at the beginning of the fixed-width area."
 		      "^[ \t]*: ?" ""
 		      (buffer-substring-no-properties post-affiliated
 						      end-area))
-	      :post-blank (count-lines end-area end)
+	      :post-blank (count-lines pos-before-blank end)
 	      :post-affiliated post-affiliated)
 	(cdr affiliated))))))
 
@@ -3704,6 +3715,9 @@ Assume point is at the beginning of the babel call."
 
 ;;;; Inline Src Block
 
+(defconst org-element-inline-src-block-regexp "\\<src_\\([^ \t\n[{]+\\)[{[]"
+  "Regexp matching inline source blocks.")
+
 (defun org-element-inline-src-block-parser ()
   "Parse inline source block at point, if any.
 
@@ -3716,7 +3730,7 @@ Assume point is at the beginning of the inline source block."
   (save-excursion
     (catch :no-object
       (when (let ((case-fold-search nil))
-	      (looking-at "\\<src_\\([^ \t\n[{]+\\)[{[]"))
+	      (looking-at org-element-inline-src-block-regexp))
 	(goto-char (match-end 1))
 	(let ((begin (match-beginning 0))
 	      (language (org-element--get-cached-string
@@ -4718,14 +4732,7 @@ element it has to parse."
         ;; Property drawer.
         ((and (pcase mode
 	        (`planning (eq ?* (char-after (line-beginning-position 0))))
-	        ((or `property-drawer `top-comment)
-                 ;; See https://debbugs.gnu.org/cgi/bugreport.cgi?bug=63225#80
-                 (save-excursion
-                   (forward-line -1)   ; faster than beginning-of-line
-                   (skip-chars-forward "[:blank:]") ; faster than looking-at-p
-                   (or (not (eolp)) ; very cheap
-                       ;; Document-wide property drawer may be preceded by blank lines.
-                       (progn (skip-chars-backward " \t\n\r") (bobp)))))
+	        ((or `property-drawer `top-comment) t)
 	        (_ nil))
 	      (looking-at-p org-property-drawer-re))
 	 (org-element-property-drawer-parser limit))
@@ -5480,11 +5487,6 @@ to interpret.  Return Org syntax as a string."
 			(mapconcat (lambda (obj) (funcall fun obj parent))
 				   data
 				   ""))
-		       ;; Full Org document.
-		       ((eq type 'org-data)
-			(mapconcat (lambda (obj) (funcall fun obj parent))
-				   (org-element-contents data)
-				   ""))
 		       ;; Plain text: return it.
 		       ((stringp data) data)
 		       ;; Element or object without contents.
@@ -5533,49 +5535,50 @@ to interpret.  Return Org syntax as a string."
 			      (make-string blank ?\n)))))))))
     (funcall fun data nil)))
 
+(defun org-element--interpret-affiliated-keyword (key value)
+  "Interpret affiliated keyword with KEY and VALUE."
+  (let (dual)
+    (when (member key org-element-dual-keywords)
+      (setq dual (cdr value) value (car value)))
+    (concat "#+" (downcase key)
+            (and dual
+                 (format "[%s]" (org-element-interpret-data dual)))
+            ": "
+            (if (member key org-element-parsed-keywords)
+                (org-element-interpret-data value)
+              value)
+            "\n")))
+
 (defun org-element--interpret-affiliated-keywords (element)
   "Return ELEMENT's affiliated keywords as Org syntax.
 If there is no affiliated keyword, return the empty string."
-  (let ((keyword-to-org
-	 (lambda (key value)
-	   (let (dual)
-	     (when (member key org-element-dual-keywords)
-	       (setq dual (cdr value) value (car value)))
-	     (concat "#+" (downcase key)
-		     (and dual
-			  (format "[%s]" (org-element-interpret-data dual)))
-		     ": "
-		     (if (member key org-element-parsed-keywords)
-			 (org-element-interpret-data value)
-		       value)
-		     "\n")))))
-    (mapconcat
-     (lambda (prop)
-       (let ((value (org-element-property prop element))
-	     (keyword (upcase (substring (symbol-name prop) 1))))
-	 (when value
-	   (if (or (member keyword org-element-multiple-keywords)
-		   ;; All attribute keywords can have multiple lines.
-		   (string-match-p "^ATTR_" keyword))
-	       (mapconcat (lambda (line) (funcall keyword-to-org keyword line))
-			  value "")
-	     (funcall keyword-to-org keyword value)))))
-     ;; List all ELEMENT's properties matching an attribute line or an
-     ;; affiliated keyword, but ignore translated keywords since they
-     ;; cannot belong to the property list.
-     (let (acc)
-       (org-element-properties-mapc
-        (lambda (prop _ __)
-          (let  ((keyword (upcase (substring (symbol-name prop) 1))))
-            (when (or (string-match-p "^ATTR_" keyword)
-		      (and
-		       (member keyword org-element-affiliated-keywords)
-		       (not (assoc keyword
-			         org-element-keyword-translation-alist))))
-              (push prop acc))))
-        element t)
-       (nreverse acc))
-     "")))
+  ;; there are some elements that will never have affiliated keywords,
+  ;; so do nothing for these
+  (if (member (org-element-type element)
+              org-element-elements-no-affiliated)
+      ""
+    (let (acc)
+      ;; List all ELEMENT's properties matching an attribute line or an
+      ;; affiliated keyword, but ignore translated keywords since they
+      ;; cannot belong to the property list.
+      (org-element-properties-mapc
+       (lambda (prop value)
+         (when value
+           (let* ((keyword (upcase (substring (symbol-name prop) 1)))
+                  (attrp (string-prefix-p "ATTR_" keyword)))
+             (when (or attrp
+                       (and
+                        (member keyword org-element-affiliated-keywords)
+                        (not (assoc keyword
+                                  org-element-keyword-translation-alist))))
+               (push (if (or attrp ; All attribute keywords can have multiple lines.
+                             (member keyword org-element-multiple-keywords))
+                         (mapconcat (lambda (line) (org-element--interpret-affiliated-keyword keyword line))
+                                    value "")
+                       (org-element--interpret-affiliated-keyword keyword value))
+                     acc)))))
+       element t)
+      (apply #'concat (nreverse acc)))))
 
 ;; Because interpretation of the parse tree must return the same
 ;; number of blank lines between elements and the same number of white
@@ -8611,7 +8614,7 @@ This function may modify match data."
 	   (goto-char (org-element-begin element))
 	   (looking-at org-complex-heading-regexp)
 	   (let ((end (match-end 4)))
-	     (if (not end) (throw 'objects-forbidden element)
+	     (if (or (not end) (> pos end)) (throw 'objects-forbidden element)
 	       (goto-char (match-beginning 4))
 	       (when (looking-at org-element-comment-string)
 		 (goto-char (match-end 0)))

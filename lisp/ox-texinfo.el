@@ -2,6 +2,7 @@
 
 ;; Copyright (C) 2012-2025 Free Software Foundation, Inc.
 ;; Author: Jonathan Leech-Pepin <jonathan.leechpepin at gmail dot com>
+;; Maintainer: Rudolf Adamkovič <rudolf@adamkovic.org>
 ;; Keywords: outlines, hypermedia, calendar, text
 
 ;; This file is part of GNU Emacs.
@@ -389,11 +390,16 @@ shell as a command.  %f in the command will be replaced by the
 relative file name, %F by the absolute file name, %b by the file
 base name (i.e. without directory and extension parts), %o by the
 base directory of the file and %O by the absolute file name of
-the output file."
+the output file.
+
+Alternatively, this may be a Lisp function that does the processing,
+This function should accept the file name as its single argument."
   :version "26.1"
   :package-version '(Org . "9.1")
-  :type '(repeat :tag "Shell command sequence"
-		 (string :tag "Shell command")))
+  :type '(choice
+          (repeat :tag "Shell command sequence"
+		  (string :tag "Shell command"))
+          (function)))
 
 (defcustom org-texinfo-logfiles-extensions
   '("aux" "toc" "cp" "fn" "ky" "pg" "tp" "vr")
