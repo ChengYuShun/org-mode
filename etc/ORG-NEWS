@@ -133,6 +133,15 @@ to your configuration.
 The new behaviour follows general babel backend rules (auto-detecting
 result type), but may affect the existing usage.
 
+*** Org mode no longer treats =:results drawer= as verbatim output
+
+Previously, =:results drawer= left the code block results verbatim in
+some scenarios.  This is no longer the case, in line with the manual
+and the intended purpose of this option.  However, the fix may have
+brought subtle changes in the code block output for users who made use
+of the previous erroneous behavior.  If you use =:results drawer= in your
+Org documents, please watch out for potential changes in the code evaluation.
+
 ** New features
 
 # We list the most important features, and the features that may
@@ -357,6 +366,19 @@ enables including unnumbered sections in the ToC aligned with the
 behaviour of other exporters. In this case, to exclude a section from
 the table of contents, mark it as =:UNNUMBERED: notoc= in its
 properties.
+
+*** ~org-tags-sort-function~ can now be a list of functions
+
+~org-tags-sort-function~ can now be set to a list of functions.
+Subsequent sorting functions will be used if two tags are found to be
+equivalent.  See docstring for more information.
+
+*** New tags sorting function ~org-tags-sort-hierarchy~
+
+By setting ~org-tags-sort-function~ to ~org-tags-sort-hierarchy~, tags
+are sorted taking their hierarchy into account.  See
+[[info:org#Tag Hierarchy][Tag Hierarchy]] for how to set up a tag
+hierarchy.
 
 *** New option ~org-cite-basic-complete-key-crm-separator~
 
@@ -675,6 +697,15 @@ Previously, the LaTeX exporter handled the PDF metadata =pdfcreator=,
 will be defined as empty and not produce any metadata if their
 corresponding ~org-latex-with-author~, ~org-latex-with-title~, or
 ~org-latex-with-creator~ option is set to ~nil~.
+
+*** Fancy HTML5 export uses ~<time>~ element for timestamps
+Previously, timestamps would always be rendered inside a ~<span
+class="timestamp">~. Now, if both ~org-html-doctype~ is ~html5~ and
+~org-html-html5-fancy~ is enabled, org will use the semantic
+~<time>~ element. This will also have the ~timestamp~ class, but
+additionally set the ~datetime~ attribute with a machine readable
+variant of the timestamp. The format used for the attribute can be
+customized using ~org-html-datetime-formats~.
 
 * Version 9.7
 
