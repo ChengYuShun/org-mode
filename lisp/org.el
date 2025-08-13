@@ -16277,7 +16277,7 @@ environment remains unintended."
 ;;;; LaTeX fragments and environments
 
 (defvar org-latex-environment-keywords
-  '("align" "align*" "equation" "equation*")
+  '("align" "align*" "equation" "equation*" "tikzcd")
   "A list of LaTeX environment keywords.")
 
 (defun org-latex-environment-keywords-regex ()
