@@ -3406,6 +3406,14 @@ All available processes and theirs documents can be found in
   :package-version '(Org . "9.0")
   :type 'symbol)
 
+(defcustom org-preview-latex-scale 1.0
+  "The scaling factor applied to LaTeX images after they are produced.
+Note that this will not affect the size of the image files themselves."
+  :group 'org-latex
+  :version "30.1"
+  :package-version '(Org . "9.7")
+  :type 'number)
+
 (defcustom org-preview-latex-process-alist
   '((dvipng
      :programs ("latex" "dvipng")
@@ -3490,18 +3498,22 @@ PROPERTIES accepts the following attributes:
 If set, :transparent-image-converter is used instead of :image-converter to
 convert an image when the background color is nil or \"Transparent\".
 
-Place-holders used by `:image-converter' and `:latex-compiler':
+Place-holders used due to `org-compile-file':
 
   %f    input file name
+  %F    absolute input file name
   %b    base name of input file
   %o    base directory of input file
   %O    absolute output file name
 
-Place-holders only used by `:image-converter':
+Place-holders used due to `org-create-formula-image':
 
   %D    dpi, which is used to adjust image size by some processing commands.
   %S    the image size scale ratio, which is used to adjust image size by some
-        processing commands."
+        processing commands.
+  %C    foreground color in hexadecimal
+  %B    background color in hexadecimal (or empty string if
+        transparent)"
   :group 'org-latex
   :package-version '(Org . "9.8")
   :type '(alist :tag "LaTeX to image backends"
@@ -16495,8 +16507,11 @@ Some of the options can be changed using the variable
 		  (goto-char beg)
 		  (let* ((processing-info
 			  (cdr (assq processing-type org-preview-latex-process-alist)))
-			 (face (face-at-point))
-			 ;; Get the colors from the face at point.
+			 (face (or (face-at-point) 'default))
+			 ;; The following two cons' replace 'default
+			 ;; and 'auto with the corrsponding faces.
+			 ;; They won't touch the special background
+			 ;; color "Transparent".
 			 (fg
 			  (let ((color (plist-get org-format-latex-options
 						  :foreground)))
@@ -16519,22 +16534,32 @@ Some of the options can be changed using the variable
                                   (face-attribute 'default :background nil))
                                  (t color))
                               color)))
+                         ;; Options to be passed to `org-create-formula-image'.
+			 (options
+			  (org-combine-plists
+			   org-format-latex-options
+			   `(:foreground ,fg :background ,bg)))
 			 (hash (sha1 (prin1-to-string
-				      (list org-format-latex-header
+				      (if (plist-get processing-info :latex-compiler)
+                                          (list org-format-latex-header
 					    org-latex-default-packages-alist
 					    org-latex-packages-alist
-					    org-format-latex-options
-					    forbuffer value fg bg))))
+                                            ;; Apparently different
+                                            ;; processors should have
+                                            ;; different hashes.
+                                            processing-type
+                                            options forbuffer value)
+                                        ;; When no LaTeX compiler is
+                                        ;; used, the LaTeX options
+                                        ;; don't matter.
+                                        (list processing-type options
+                                              forbuffer value)))))
 			 (imagetype (or (plist-get processing-info :image-output-type) "png"))
 			 (absprefix (expand-file-name prefix dir))
 			 (linkfile (format "%s_%s.%s" prefix hash imagetype))
 			 (movefile (format "%s_%s.%s" absprefix hash imagetype))
 			 (sep (and block-type "\n\n"))
-			 (link (concat sep "[[file:" linkfile "]]" sep))
-			 (options
-			  (org-combine-plists
-			   org-format-latex-options
-			   `(:foreground ,fg :background ,bg))))
+			 (link (concat sep "[[file:" linkfile "]]" sep)))
 		    (when msg (message msg cnt))
 		    (unless checkdir-flag ; Ensure the directory exists.
 		      (setq checkdir-flag t)
@@ -16545,7 +16570,8 @@ Some of the options can be changed using the variable
 		      (org-create-formula-image
 		       value movefile options forbuffer processing-type))
                     (org-place-formula-image
-                     link block-type beg end value overlays movefile imagetype nil
+                     link block-type beg end value overlays movefile
+                     imagetype org-preview-latex-scale
                      (cond ((equal (car context) 'latex-environment) 'environment)
                            ((member (substring value 0 2) '("\\[" "$$"))
                             'fragment)
@@ -16730,14 +16756,13 @@ a HTML file."
 	 (processing-info
 	  (cdr (assq processing-type org-preview-latex-process-alist)))
 	 (programs (plist-get processing-info :programs))
+         ;; This will be printed if any of the programs cannot be
+         ;; found.
 	 (error-message (or (plist-get processing-info :message) ""))
          ;; If we want to use the image converter directly, we shall
          ;; set this to the string "tex".
 	 (image-input-type (plist-get processing-info :image-input-type))
 	 (image-output-type (plist-get processing-info :image-output-type))
-	 (post-clean (or (plist-get processing-info :post-clean)
-			 '(".dvi" ".xdv" ".pdf" ".tex" ".aux" ".log"
-			   ".svg" ".png" ".jpg" ".jpeg" ".out")))
 	 (latex-compiler (plist-get processing-info :latex-compiler))
 	 (latex-header
           (when latex-compiler
@@ -16748,12 +16773,8 @@ a HTML file."
 	         'snippet))))
          ;; This is the temporary directory that contains everything
          ;; and will eventually be removed.
-	 (tmpdir temporary-file-directory)
-         ;; This is the prefix that will be used to create various
-         ;; file names.
-	 (texfilebase (make-temp-name
-		       (expand-file-name "orgtex" tmpdir)))
-	 (texfile (concat texfilebase ".tex"))
+	 (tmpdir (make-temp-file "orgtex-" t))
+	 (texfile (concat tmpdir "formula.tex"))
          ;; This is the image-size-adjusting parameter specified by
          ;; `org-preview-latex-process-alist'.
 	 (image-size-adjust (or (plist-get processing-info :image-size-adjust)
@@ -16770,6 +16791,13 @@ a HTML file."
 		 "Black"))
 	 (bg (or (plist-get options (if buffer :background :html-background))
 		 "Transparent"))
+         (fg-latex (org-latex-color-format fg))
+         (bg-latex (cond
+	            ((string= bg "Transparent") nil)
+	            (t (org-latex-color-format bg))))
+         (fg-hex (org-color-hex-format fg))
+         (bg-hex (if (string= bg "Transparent") ""
+                   (org-color-hex-format bg)))
          ;; Either transparent image converter or the normal image
          ;; converter.
 	 (image-converter
@@ -16777,18 +16805,12 @@ a HTML file."
                    (plist-get processing-info :transparent-image-converter))
               (plist-get processing-info :image-converter)))
          (log-buf (get-buffer-create "*Org Preview LaTeX Output*"))
-	 (resize-mini-windows nil)) ;Fix Emacs flicker when creating image.
+         ;; This fixes Emacs flickering when creating the image.
+	 (resize-mini-windows nil))
     ;; Check whether the programs exist.
     (dolist (program programs)
       (org-check-external-command program error-message))
     ;; The function `org-latex-color-format' helps format the color.
-    (if (eq fg 'default)
-	(setq fg (org-latex-color :foreground))
-      (setq fg (org-latex-color-format fg)))
-    (setq bg (cond
-	      ((eq bg 'default) (org-latex-color :background))
-	      ((string= bg "Transparent") nil)
-	      (t (org-latex-color-format bg))))
     ;; Remove TeX \par at end of snippet to avoid trailing space.
     (if (string-suffix-p string "\n")
         (aset string (1- (length string)) ?%)
@@ -16800,9 +16822,9 @@ a HTML file."
           (insert string)
         (insert latex-header)
         (insert "\n\\begin{document}\n"
-	        "\\definecolor{fg}{rgb}{" fg "}%\n"
-	        (if bg
-		    (concat "\\definecolor{bg}{rgb}{" bg "}%\n"
+	        "\\definecolor{fg}{rgb}{" fg-latex "}%\n"
+	        (if bg-latex
+		    (concat "\\definecolor{bg}{rgb}{" bg-latex "}%\n"
 			    "\n\\pagecolor{bg}%\n")
 		  "")
 	        "\n{\\color{fg}\n"
@@ -16812,22 +16834,25 @@ a HTML file."
     (let* ((err-msg (format "Please adjust `%s' part of \
 `org-preview-latex-process-alist'."
 			    processing-type))
+           (replace-spec
+	    `((?D . ,(shell-quote-argument (format "%s" dpi)))
+	      (?S . ,(shell-quote-argument (format "%s" scale)))
+              (?C . ,(shell-quote-argument fg-hex))
+              (?B . ,(shell-quote-argument bg-hex))))
 	   (image-input-file
             (if latex-compiler
 	        (org-compile-file
-	         texfile latex-compiler image-input-type err-msg log-buf)
+                 texfile latex-compiler image-input-type err-msg
+                 log-buf replace-spec)
               ;; Pass on the TEX file if no latex compiling is
               ;; intended.
               texfile))
 	   (image-output-file
 	    (org-compile-file
-	     image-input-file image-converter image-output-type err-msg log-buf
-	     `((?D . ,(shell-quote-argument (format "%s" dpi)))
-	       (?S . ,(shell-quote-argument (format "%s" scale)))))))
+	     image-input-file image-converter image-output-type
+             err-msg log-buf replace-spec)))
       (copy-file image-output-file tofile 'replace)
-      (dolist (e post-clean)
-	(when (file-exists-p (concat texfilebase e))
-	  (delete-file (concat texfilebase e))))
+      (delete-directory tmpdir t)
       image-output-file)))
 
 (defun org-splice-latex-header (tpl def-pkg pkg snippets-p &optional extra)
@@ -16908,6 +16933,12 @@ SNIPPETS-P indicates if this is run to create snippet images for HTML."
   (apply #'format "%s,%s,%s"
 	 (mapcar 'org-normalize-color
 		 (color-values color-name))))
+
+(defun org-color-hex-format (color-name)
+  "Convert COLOR-NAME to hex."
+  (apply #'format "%02X%02X%02X"
+         (mapcar #'(lambda (x) (round (* 255 x)))
+                 (color-name-to-rgb color-name))))
 
 (defun org-normalize-color (value)
   "Return string to be used as color value for an RGB component."
