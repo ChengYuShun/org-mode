@@ -8488,7 +8488,8 @@ This function may modify the match data."
          '(org-element org-element-parser)
          (format-message
           "`org-element-at-point' cannot be used in non-Org buffer %S (%s)"
-          (current-buffer) major-mode)))
+          (current-buffer) major-mode)
+         :debug))
       ;; Allow re-parsing when the command can benefit from it.
       (when (and cached-only
                  (memq this-command org-element--cache-non-modifying-commands))
