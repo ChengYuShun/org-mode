@@ -19,7 +19,7 @@
 
 ;;; Code:
 
-(eval-and-compile (require 'cl-lib))
+(eval-when-compile (require 'cl-lib))
 
 (require 'org-element)
 (require 'org)
@@ -301,7 +301,7 @@ Return interpreted string."
   (should (eq 'object (org-element-class '(foo nil) '("secondary"))))
   (should
    (eq 'object
-       (let* ((datum '(foo nil))
+       (let* ((datum (list 'foo nil))
 	      (headline `(headline (:title (,datum) :secondary (:title)))))
 	 (org-element-put-property datum :parent headline)
 	 (org-element-class datum)))))
@@ -521,7 +521,7 @@ Some other text
                    children))
     (should (equal (cddr (apply #'org-element-create 'bar nil children))
                    children)))
-  (let ((children '("foo" nil "bar")))
+  (let ((children (list "foo" nil "bar")))
     (should (equal (cddr (apply #'org-element-create 'bar nil children))
                    (delq nil children)))))
 
@@ -811,7 +811,8 @@ Some other text
   (should-not (org-element-copy nil))
   ;; Return a copy secondary strings.
   (should (equal '("text") (org-element-copy '("text"))))
-  (should-not (eq '("text") (org-element-copy '("text"))))
+  (let ((secondary (list "test")))
+    (should-not (eq secondary (org-element-copy secondary))))
   ;; Do not alter the source.
   (org-test-with-temp-text "*bold*"
     (let* ((source (org-element-context))
@@ -4546,14 +4547,14 @@ Text
 	      (lambda (hl) (org-element-property :raw-value hl))))))
   (should
    (equal "Test"
-	  (let ((contents "Test"))
+	  (let ((contents (copy-sequence "Test")))
 	    (org-test-with-temp-text contents
 	      (add-text-properties 0 1 '(invisible t) contents)
 	      (org-element-map (org-element-parse-buffer nil t) 'plain-text
 		#'org-no-properties nil t)))))
   (should
    (equal "Test"
-	  (let ((contents "Test"))
+	  (let ((contents (copy-sequence "Test")))
 	    (org-test-with-temp-text (concat "- " contents)
 	      (add-text-properties 0 1 '(invisible t) contents)
 	      (org-element-map (org-element-parse-buffer nil t) 'plain-text
@@ -5285,6 +5286,21 @@ Text
 	   (org-element-at-point)
 	   (insert "+:")
 	   (org-element-type (org-element-at-point))))))
+  ;; Corner case: inserting blank line at :contents-begin modifies
+  ;; structure by adding :pre-blank
+  (should
+   (let ((org-element-use-cache t))
+     (org-test-with-temp-text ":LOGBOOK:\n<point>Paragraph.\n:END:\n"
+       (let ((drawer (org-element-at-point (point-min))))
+         (message "Before insert")
+         (should (org-element-type-p drawer 'drawer))
+         (should (equal (org-element-contents-begin drawer) (point)))
+         (should (equal (org-element-property :pre-blank drawer) 0))
+	 (insert "\n")
+         (message "After insert")
+         (setq drawer (org-element-at-point (point-min)))
+         (should (equal (org-element-contents-begin drawer) (point)))
+         (should (equal (org-element-property :pre-blank drawer) 1))))))
   ;; Properly handle elements not altered by modifications but whose
   ;; parents were removed from cache.
   (should

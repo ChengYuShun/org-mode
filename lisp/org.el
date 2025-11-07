@@ -1785,7 +1785,8 @@ make an intelligent decision whether to insert a blank line or not."
 (defcustom org-highlight-sparse-tree-matches t
   "Non-nil means highlight all matches that define a sparse tree.
 The highlights will automatically disappear the next time the buffer is
-changed by an edit command."
+changed by an edit command.
+Must be non-nil to traverse the sparse tree using `next-error'."
   :group 'org-sparse-trees
   :type 'boolean)
 
@@ -3529,6 +3530,15 @@ images at the same place."
   :package-version '(Org . "9.0")
   :type 'string)
 
+(defcustom org-latex-mathml-directory "ltxmathml/"
+  "Path to store MathML files converted from LaTeX fragments.
+A relative path here creates many directories relative to the
+processed Org files paths.  An absolute path puts all files
+in the same place."
+  :group 'org-latex
+  :package-version '(Org . "9.8")
+  :type 'string)
+
 (defun org-format-latex-mathml-available-p ()
   "Return t if `org-latex-to-mathml-convert-command' is usable."
   (save-match-data
@@ -5177,8 +5187,9 @@ The following commands are available:
   ;; Initialize radio targets.
   (org-update-radio-target-regexp)
   ;; Indentation.
-  (setq-local indent-line-function 'org-indent-line)
-  (setq-local indent-region-function 'org-indent-region)
+  (setq-local indent-line-function #'org-indent-line)
+  (setq-local indent-region-function #'org-indent-region)
+  (setq-local electric-indent-inhibit t)
   ;; Filling and auto-filling.
   (org-setup-filling)
   ;; Comments.
@@ -5928,7 +5939,10 @@ highlighting was done, nil otherwise."
 			       1
 			     0))
 		   (start (+ offset (match-beginning 0)))
-		   (end (match-end 0)))
+		   (end (save-excursion
+                          (goto-char (match-end 0))
+                          ;; Do not fontify trailing whitespace.
+                          (skip-chars-backward " \t") (point))))
 	      (if (memq 'native org-highlight-latex-and-related)
 		  (org-src-font-lock-fontify-block "latex" start end)
 		(font-lock-prepend-text-property start end
@@ -6177,7 +6191,6 @@ needs to be inserted at a specific position in the font-lock sequence.")
 		'(org-font-lock-keywords t nil nil backward-paragraph))
     (setq-local font-lock-extend-after-change-region-function
 		#'org-fontify-extend-region)
-    (kill-local-variable 'font-lock-keywords)
     nil))
 
 (defun org-toggle-pretty-entities ()
@@ -7095,13 +7108,16 @@ After top level, it switches back to sibling level."
 	(funcall fun)))))
 
 (defun org-map-region (fun beg end)
-  "Call FUN for every heading between BEG and END."
+  "Call FUN for every heading between BEG and END.
+The point is placed at the beginning of each heading
+(including any *) before FUN is called."
   (let ((org-ignore-region t))
     (save-excursion
       (setq end (copy-marker end))
       (goto-char beg)
       (when (and (re-search-forward org-outline-regexp-bol nil t)
 		 (< (point) end))
+        (goto-char (match-beginning 0))
 	(funcall fun))
       (while (and (progn
 		    (outline-next-heading)
@@ -7384,7 +7400,7 @@ of some markers in the region, even if CUT is non-nil.  This is
 useful if the caller implements cut-and-paste as copy-then-paste-then-cut."
   (interactive "p")
   (org-preserve-local-variables
-   (let (beg end folded (beg0 (point)))
+   (let (beg end folded subtree-text (beg0 (point)))
      (if (called-interactively-p 'any)
 	 (org-back-to-heading nil)    ; take what looks like a subtree
        (org-back-to-heading t))	      ; take what is really there
@@ -7411,11 +7427,13 @@ useful if the caller implements cut-and-paste as copy-then-paste-then-cut."
        (setq org-subtree-clip-folded folded)
        (when (or cut force-store-markers)
 	 (org-save-markers-in-region beg end))
+       (setq subtree-text (buffer-substring-no-properties beg end))
        (if cut (kill-region beg end) (copy-region-as-kill beg end))
-       (setq org-subtree-clip (current-kill 0))
+       (setq org-subtree-clip subtree-text)
        (message "%s: Subtree(s) with %d characters"
 		(if cut "Cut" "Copied")
-		(length org-subtree-clip))))))
+		(length org-subtree-clip))
+       subtree-text))))
 
 (defun org-paste-subtree (&optional level tree for-yank remove)
   "Paste the clipboard as a subtree, with modification of headline level.
@@ -11259,6 +11277,8 @@ The function must neither move point nor alter narrowing."
 		nil 'local))
     (unless org-sparse-tree-open-archived-trees
       (org-fold-hide-archived-subtrees (point-min) (point-max)))
+    (when org-highlight-sparse-tree-matches
+      (setq next-error-last-buffer (current-buffer)))
     (run-hooks 'org-occur-hook)
     (when (called-interactively-p 'interactive)
       (message "%d match(es) for regexp %s" cnt regexp))
@@ -11636,9 +11656,11 @@ headlines matching this string."
        :next-re heading-re
        :fail-re heading-re
        :narrow t))
-    (when (and (eq action 'sparse-tree)
-	       (not org-sparse-tree-open-archived-trees))
-      (org-fold-hide-archived-subtrees (point-min) (point-max)))
+    (when (eq action 'sparse-tree)
+      (unless org-sparse-tree-open-archived-trees
+        (org-fold-hide-archived-subtrees (point-min) (point-max)))
+      (when org-highlight-sparse-tree-matches
+        (setq next-error-last-buffer (current-buffer))))
     (nreverse rtn)))
 
 (defun org-remove-uninherited-tags (tags)
@@ -18743,7 +18765,7 @@ an argument, unconditionally call `org-insert-heading'."
      ["Reveal Context" org-fold-reveal t]
      ["Show All" org-fold-show-all t]
      "--"
-     ["Subtree to indirect buffer" org-tree-to-indirect-buffer t])
+     ["Subtree to Indirect Buffer" org-tree-to-indirect-buffer t])
     "--"
     ["New Heading" org-insert-heading t]
     ("Navigate Headings"
@@ -18758,45 +18780,45 @@ an argument, unconditionally call `org-insert-heading'."
      ["Move Subtree Up" org-metaup (org-at-heading-p)]
      ["Move Subtree Down" org-metadown (org-at-heading-p)]
      "--"
-     ["Copy Subtree"  org-copy-special (org-in-subtree-not-table-p)]
-     ["Cut Subtree"  org-cut-special (org-in-subtree-not-table-p)]
+     ["Copy Subtree" org-copy-special (org-in-subtree-not-table-p)]
+     ["Cut Subtree" org-cut-special (org-in-subtree-not-table-p)]
      ["Paste Subtree"  org-paste-special (not (org-at-table-p))]
      "--"
-     ["Clone subtree, shift time" org-clone-subtree-with-time-shift t]
+     ["Clone Subtree, Shift Time" org-clone-subtree-with-time-shift t]
      "--"
-     ["Copy visible text"  org-copy-visible t]
+     ["Copy Visible Text" org-copy-visible t]
      "--"
      ["Promote Heading" org-metaleft (org-in-subtree-not-table-p)]
      ["Promote Subtree" org-shiftmetaleft (org-in-subtree-not-table-p)]
-     ["Demote Heading"  org-metaright (org-in-subtree-not-table-p)]
-     ["Demote Subtree"  org-shiftmetaright (org-in-subtree-not-table-p)]
+     ["Demote Heading" org-metaright (org-in-subtree-not-table-p)]
+     ["Demote Subtree" org-shiftmetaright (org-in-subtree-not-table-p)]
      "--"
      ["Sort Region/Children" org-sort t]
      "--"
-     ["Convert to odd levels" org-convert-to-odd-levels t]
-     ["Convert to odd/even levels" org-convert-to-oddeven-levels t])
+     ["Convert to Odd Levels" org-convert-to-odd-levels t]
+     ["Convert to Odd/Even Levels" org-convert-to-oddeven-levels t])
     ("Editing"
      ["Emphasis..." org-emphasize t]
-     ["Add block structure" org-insert-structure-template t]
+     ["Add Block Structure" org-insert-structure-template t]
      ["Edit Source Example" org-edit-special t]
      "--"
-     ["Footnote new/jump" org-footnote-action t]
-     ["Footnote extra" (org-footnote-action t) :active t :keys "C-u C-c C-x f"])
+     ["Footnote New/Jump" org-footnote-action t]
+     ["Footnote Extra" (org-footnote-action t) :active t :keys "C-u C-c C-x f"])
     ("Archive"
-     ["Archive (default method)" org-archive-subtree-default (org-in-subtree-not-table-p)]
+     ["Archive (Default Method)" org-archive-subtree-default (org-in-subtree-not-table-p)]
      "--"
-     ["Move Subtree to Archive file" org-archive-subtree (org-in-subtree-not-table-p)]
-     ["Toggle ARCHIVE tag" org-toggle-archive-tag (org-in-subtree-not-table-p)]
-     ["Move subtree to Archive sibling" org-archive-to-archive-sibling (org-in-subtree-not-table-p)])
+     ["Move Subtree to Archive File" org-archive-subtree (org-in-subtree-not-table-p)]
+     ["Toggle ARCHIVE Tag" org-toggle-archive-tag (org-in-subtree-not-table-p)]
+     ["Move Subtree to Archive Sibling" org-archive-to-archive-sibling (org-in-subtree-not-table-p)])
     "--"
     ("Hyperlinks"
      ["Store Link (Global)" org-store-link t]
-     ["Find existing link to here" org-occur-link-in-agenda-files t]
+     ["Find Existing Link to Here" org-occur-link-in-agenda-files t]
      ["Insert Link" org-insert-link t]
      ["Follow Link" org-open-at-point t]
      "--"
-     ["Next link" org-next-link t]
-     ["Previous link" org-previous-link t]
+     ["Next Link" org-next-link t]
+     ["Previous Link" org-previous-link t]
      "--"
      ["Descriptive Links"
       org-toggle-link-display
@@ -18810,42 +18832,43 @@ an argument, unconditionally call `org-insert-heading'."
     "--"
     ("TODO Lists"
      ["TODO/DONE/-" org-todo t]
-     ("Select keyword"
-      ["Next keyword" org-shiftright (org-at-heading-p)]
-      ["Previous keyword" org-shiftleft (org-at-heading-p)]
+     ("Select Keyword"
+      ["Next Keyword" org-shiftright (org-at-heading-p)]
+      ["Previous Keyword" org-shiftleft (org-at-heading-p)]
       ["Complete Keyword" pcomplete (assq :todo-keyword (org-context))]
-      ["Next keyword set" org-shiftcontrolright (and (> (length org-todo-sets) 1) (org-at-heading-p))]
-      ["Previous keyword set" org-shiftcontrolright (and (> (length org-todo-sets) 1) (org-at-heading-p))])
+      ["Next Keyword Set" org-shiftcontrolright (and (> (length org-todo-sets) 1) (org-at-heading-p))]
+      ["Previous Keyword Set" org-shiftcontrolright (and (> (length org-todo-sets) 1) (org-at-heading-p))])
      ["Show TODO Tree" org-show-todo-tree :active t :keys "C-c / t"]
-     ["Global TODO list" org-todo-list :active t :keys "\\[org-agenda] t"]
+     ["Global TODO List" org-todo-list :active t :keys "\\[org-agenda] t"]
      "--"
-     ["Enforce dependencies" (customize-variable 'org-enforce-todo-dependencies)
+     ["Enforce Dependencies" (customize-variable 'org-enforce-todo-dependencies)
       :selected org-enforce-todo-dependencies :style toggle :active t]
-     "Settings for tree at point"
-     ["Do Children sequentially" org-toggle-ordered-property :style radio
+     "Settings for Tree at Point"
+     "--"
+     ["Enforce TODO Completion Order"
+      org-toggle-ordered-property
+      :style toggle
       :selected (org-entry-get nil "ORDERED")
-      :active org-enforce-todo-dependencies :keys "C-c C-x o"]
-     ["Do Children parallel" org-toggle-ordered-property :style radio
-      :selected (not (org-entry-get nil "ORDERED"))
-      :active org-enforce-todo-dependencies :keys "C-c C-x o"]
+      :active org-enforce-todo-dependencies
+      :keys "C-c C-x o"]
      "--"
      ["Set Priority" org-priority t]
      ["Priority Up" org-shiftup t]
      ["Priority Down" org-shiftdown t]
      "--"
-     ["Get news from all feeds" org-feed-update-all t]
-     ["Go to the inbox of a feed..." org-feed-goto-inbox t]
-     ["Customize feeds" (customize-variable 'org-feed-alist) t])
-    ("TAGS and Properties"
+     ["Get News From All Feeds" org-feed-update-all t]
+     ["Go to Inbox of Feed..." org-feed-goto-inbox t]
+     ["Customize Feeds" (customize-variable 'org-feed-alist) t])
+    ("Tags and Properties"
      ["Set Tags" org-set-tags-command (not (org-before-first-heading-p))]
-     ["Change tag in region" org-change-tag-in-region (org-region-active-p)]
+     ["Change Tag in Region" org-change-tag-in-region (org-region-active-p)]
      "--"
-     ["Set property" org-set-property (not (org-before-first-heading-p))]
-     ["Column view of properties" org-columns t]
+     ["Set Property" org-set-property (not (org-before-first-heading-p))]
+     ["Column View of Properties" org-columns t]
      ["Insert Column View DBlock" org-columns-insert-dblock t])
     ("Dates and Scheduling"
      ["Timestamp" org-timestamp (not (org-before-first-heading-p))]
-     ["Timestamp (inactive)" org-timestamp-inactive (not (org-before-first-heading-p))]
+     ["Timestamp (Inactive)" org-timestamp-inactive (not (org-before-first-heading-p))]
      ("Change Date"
       ["1 Day Later" org-shiftright (org-at-timestamp-p 'lax)]
       ["1 Day Earlier" org-shiftleft (org-at-timestamp-p 'lax)]
@@ -18855,10 +18878,10 @@ an argument, unconditionally call `org-insert-heading'."
      ["Schedule Item" org-schedule (not (org-before-first-heading-p))]
      ["Deadline" org-deadline (not (org-before-first-heading-p))]
      "--"
-     ["Custom time format" org-toggle-timestamp-overlays
+     ["Custom Time Format" org-toggle-timestamp-overlays
       :style radio :selected org-display-custom-times]
      "--"
-     ["Goto Calendar" org-goto-calendar t]
+     ["Go to Calendar" org-goto-calendar t]
      ["Date from Calendar" org-date-from-calendar t]
      "--"
      ["Start/Restart Timer" org-timer-start t]
@@ -18867,19 +18890,19 @@ an argument, unconditionally call `org-insert-heading'."
      ["Insert Timer String" org-timer t]
      ["Insert Timer Item" org-timer-item t])
     ("Logging work"
-     ["Clock in" org-clock-in :active t :keys "C-c C-x C-i"]
-     ["Switch task" (lambda () (interactive) (org-clock-in '(4))) :active t :keys "C-u C-c C-x C-i"]
-     ["Clock out" org-clock-out t]
-     ["Clock cancel" org-clock-cancel t]
+     ["Clock In" org-clock-in :active t :keys "C-c C-x C-i"]
+     ["Switch Task" (lambda () (interactive) (org-clock-in '(4))) :active t :keys "C-u C-c C-x C-i"]
+     ["Clock Out" org-clock-out t]
+     ["Clock Cancel" org-clock-cancel t]
      "--"
-     ["Mark as default task" org-clock-mark-default-task t]
-     ["Clock in, mark as default" (lambda () (interactive) (org-clock-in '(16))) :active t :keys "C-u C-u C-c C-x C-i"]
-     ["Goto running clock" org-clock-goto t]
+     ["Mark as Default Task" org-clock-mark-default-task t]
+     ["Clock In, Mark as Default" (lambda () (interactive) (org-clock-in '(16))) :active t :keys "C-u C-u C-c C-x C-i"]
+     ["Go to Running Clock" org-clock-goto t]
      "--"
-     ["Display times" org-clock-display t]
-     ["Create clock table" org-clock-report t]
+     ["Display Times" org-clock-display t]
+     ["Create Clock Table" org-clock-report t]
      "--"
-     ["Record DONE time"
+     ["Record DONE Time"
       (progn (setq org-log-done (not org-log-done))
 	     (message "Switching to %s will %s record a timestamp"
 		      (car org-done-keywords)
@@ -18889,20 +18912,20 @@ an argument, unconditionally call `org-insert-heading'."
     ["Agenda Command..." org-agenda t]
     ["Set Restriction Lock" org-agenda-set-restriction-lock t]
     ("File List for Agenda")
-    ("Special views current file"
+    ("Special Views Current File"
      ["TODO Tree"  org-show-todo-tree t]
      ["Check Deadlines" org-check-deadlines t]
-     ["Tags/Property tree" org-match-sparse-tree t])
+     ["Tags/Property Tree" org-match-sparse-tree t])
     "--"
     ["Export/Publish..." org-export-dispatch t]
     ("LaTeX"
      ["Org CDLaTeX mode" org-cdlatex-mode :active (require 'cdlatex nil t)
       :style toggle :selected org-cdlatex-mode]
      ["Insert Environment" cdlatex-environment (fboundp 'cdlatex-environment)]
-     ["Insert math symbol" cdlatex-math-symbol (fboundp 'cdlatex-math-symbol)]
-     ["Modify math symbol" org-cdlatex-math-modify
+     ["Insert Math Symbol" cdlatex-math-symbol (fboundp 'cdlatex-math-symbol)]
+     ["Modify Math Symbol" org-cdlatex-math-modify
       (org-inside-LaTeX-fragment-p)]
-     ["Insert citation" org-reftex-citation t])
+     ["Insert Citation" org-reftex-citation t])
     "--"
     ("Documentation"
      ["Show Version" org-version t]
@@ -18912,12 +18935,13 @@ an argument, unconditionally call `org-insert-heading'."
      ["Browse Org Group" org-customize t]
      "--"
      ["Expand This Menu" org-create-customize-menu t])
-    ["Send bug report" org-submit-bug-report t]
+    ["Send Bug Report" org-submit-bug-report t]
     "--"
-    ("Refresh/Reload"
-     ["Refresh setup current buffer" org-mode-restart t]
-     ["Reload Org (after update)" org-reload t]
-     ["Reload Org uncompiled" (org-reload t) :active t :keys "C-u C-c C-x !"])))
+    ("Restart/Reload"
+     ["Restart Org in Current Buffer" org-mode-restart t]
+     "--"
+     ["Reload Org" org-reload t]
+     ["Reload Org Uncompiled" (org-reload t) :active t :keys "C-u C-c C-x !"])))
 
 (easy-menu-define org-tbl-menu org-mode-map "Org Table menu."
   '("Table"
@@ -18941,9 +18965,9 @@ an argument, unconditionally call `org-insert-heading'."
      ["Move Row Down" org-metadown (org-at-table-p)]
      ["Delete Row" org-shiftmetaup (org-at-table-p)]
      ["Insert Row" org-shiftmetadown (org-at-table-p)]
-     ["Sort lines in region" org-table-sort-lines (org-at-table-p)]
+     ["Sort Lines in Region" org-table-sort-lines (org-at-table-p)]
      "--"
-     ["Insert Hline" org-ctrl-c-minus (org-at-table-p)])
+     ["Insert Horizontal Line" org-ctrl-c-minus (org-at-table-p)])
     ("Rectangle"
      ["Copy Rectangle" org-copy-special (org-at-table-p)]
      ["Cut Rectangle" org-cut-special (org-at-table-p)]
@@ -18955,9 +18979,9 @@ an argument, unconditionally call `org-insert-heading'."
      ["Set Field Formula" (org-table-eval-formula '(4)) :active (org-at-table-p) :keys "C-u C-c ="]
      ["Edit Formulas" org-edit-special (org-at-table-p)]
      "--"
-     ["Recalculate line" org-table-recalculate (org-at-table-p)]
-     ["Recalculate all" (lambda () (interactive) (org-table-recalculate '(4))) :active (org-at-table-p) :keys "C-u C-c *"]
-     ["Iterate all" (lambda () (interactive) (org-table-recalculate '(16))) :active (org-at-table-p) :keys "C-u C-u C-c *"]
+     ["Recalculate Line" org-table-recalculate (org-at-table-p)]
+     ["Recalculate All" (lambda () (interactive) (org-table-recalculate '(4))) :active (org-at-table-p) :keys "C-u C-c *"]
+     ["Iterate All" (lambda () (interactive) (org-table-recalculate '(16))) :active (org-at-table-p) :keys "C-u C-u C-c *"]
      "--"
      ["Toggle Recalculate Mark" org-table-rotate-recalc-marks (org-at-table-p)]
      "--"
@@ -18967,7 +18991,7 @@ an argument, unconditionally call `org-insert-heading'."
     ["Debug Formulas"
      org-table-toggle-formula-debugger
      :style toggle :selected (bound-and-true-p org-table-formula-debug)]
-    ["Show Col/Row Numbers"
+    ["Show Column/Row Numbers"
      org-table-toggle-coordinate-overlays
      :style toggle
      :selected (bound-and-true-p org-table-overlay-coordinates)]
@@ -18977,11 +19001,11 @@ an argument, unconditionally call `org-insert-heading'."
     ["Import from File" org-table-import (not (org-at-table-p))]
     ["Export to File" org-table-export (org-at-table-p)]
     "--"
-    ["Create/Convert from/to table.el" org-table-create-with-table.el t]
+    ["Create/Convert 'table.el' Table" org-table-create-with-table.el t]
     "--"
     ("Plot"
-     ["Ascii plot" orgtbl-ascii-plot :active (org-at-table-p) :keys "C-c \" a"]
-     ["Gnuplot" org-plot/gnuplot :active (org-at-table-p) :keys "C-c \" g"])))
+     ["ASCII Plot" orgtbl-ascii-plot :active (org-at-table-p) :keys "C-c \" a"]
+     ["Gnuplot Plot" org-plot/gnuplot :active (org-at-table-p) :keys "C-c \" g"])))
 
 (defun org-info (&optional node)
   "Read documentation for Org in the info system.
@@ -19080,10 +19104,10 @@ Your bug report will be posted to the Org mailing list.
 	 (append
 	  (list
 	   ["Edit File List" (org-edit-agenda-file-list) t]
-	   ["Add/Move Current File to Front of List" org-agenda-file-to-front t]
-	   ["Remove Current File from List" org-remove-file t]
-	   ["Cycle through agenda files" org-cycle-agenda-files t]
-	   ["Occur in all agenda files" org-occur-in-agenda-files t]
+	   ["Add/Move Current File to Front" org-agenda-file-to-front t]
+	   ["Remove Current File" org-remove-file t]
+	   ["Cycle Through Files" org-cycle-agenda-files t]
+	   ["Occur in Files" org-occur-in-agenda-files t]
 	   "--")
 	  (mapcar 'org-file-menu-entry
 		  ;; Prevent initialization from failing.
@@ -19202,7 +19226,8 @@ With prefix arg UNCOMPILED, load the uncompiled versions."
 	(when (or (> marker (point-max)) (< marker (point-min)))
 	  (widen))
 	(goto-char marker)
-	(org-fold-show-context 'org-goto))
+        (when (derived-mode-p 'org-mode)
+	  (org-fold-show-context 'org-goto)))
     (if bookmark
 	(bookmark-jump bookmark)
       (error "Cannot find location"))))
@@ -20828,12 +20853,11 @@ end."
         (insert data)))
     (insert
      (if (not (eq org-yank-image-save-method 'attach))
-         (org-link-make-string (concat "file:" (org-link--normalize-filename absname)))
+         (org-link-make-string-for-buffer (concat "file:" absname))
        (progn
          (require 'org-attach)
-         (org-attach-attach absname nil 'mv)
-         (org-link-make-string (concat "attachment:" filename)))))
-    ))
+         (apply #'org-link-make-string-for-buffer
+                (org-attach-attach absname nil 'mv)))))))
 
 ;; I cannot find a spec for this but
 ;; https://indigo.re/posts/2021-12-21-clipboard-data.html and pcmanfm
@@ -20965,9 +20989,9 @@ in which case, space is inserted."
       (`open (dnd-open-local-file url action))
       (`file-link
        (let ((filename (dnd-get-local-file-name url)))
-         (insert (org-link-make-string
-                  (concat "file:" (org-link--normalize-filename filename)))
-                 separator))))))
+         (insert
+          (org-link-make-string-for-buffer filename)
+          separator))))))
 
 (defun org--dnd-attach-file (url action separator)
   "Attach filename given by URL using method pertaining to ACTION.
@@ -20994,31 +21018,29 @@ SEPARATOR is the string to insert after each link."
                             (?l "hard link" ln)
                             (?s "symbolic link" lns))))
                    ('private (or org-yank-dnd-default-attach-method
-                                 org-attach-method)))))
+                                 org-attach-method))))
+         link description)
     (if separatep
         (progn
           (unless (file-directory-p org-yank-image-save-method)
             (make-directory org-yank-image-save-method t))
-          (funcall
-           (pcase method
-             ('cp #'copy-file)
-             ('mv #'rename-file)
-             ('ln #'add-name-to-file)
-             ('lns #'make-symbolic-link))
-           filename
-           (expand-file-name (file-name-nondirectory filename)
-                             org-yank-image-save-method)))
-      (org-attach-attach filename nil method))
+          (let ((stored-filename
+                 (expand-file-name
+                  (file-name-nondirectory filename)
+                  org-yank-image-save-method)))
+            (funcall
+             (pcase method
+               ('cp #'copy-file)
+               ('mv #'rename-file)
+               ('ln #'add-name-to-file)
+               ('lns #'make-symbolic-link))
+             filename stored-filename)
+            (setq link (concat "file:" stored-filename))))
+      (let ((link-pair (org-attach-attach filename nil method)))
+        (setq link (car link-pair)
+              description (cdr link-pair))))
     (insert
-     (org-link-make-string
-      (concat (if separatep
-                  "file:"
-                "attachment:")
-              (if separatep
-                  (org-link--normalize-filename
-                   (expand-file-name (file-name-nondirectory filename)
-                                     org-yank-image-save-method))
-                (file-name-nondirectory filename))))
+     (org-link-make-string-for-buffer link description)
      separator)
     'private))
 
@@ -21043,11 +21065,10 @@ When NEED-NAME is nil, the drop is complete."
           (`open (expand-file-name (make-temp-name "emacs.") temporary-file-directory))
           (`file-link (read-file-name "Write file to: " nil nil nil filename))))
     (pcase org--dnd-xds-method
-      (`attach (insert (org-link-make-string
+      (`attach (insert (org-link-make-string-for-buffer
                         (concat "attachment:" (file-name-nondirectory filename)))))
-      (`file-link (insert (org-link-make-string
-                           (concat "file:"
-                                   (org-link--normalize-filename filename)))))
+      (`file-link (insert (org-link-make-string-for-buffer
+                           (concat "file:" filename))))
       (`open (find-file filename)))
     (setq-local org--dnd-xds-method nil)))
 

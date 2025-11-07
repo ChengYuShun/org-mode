@@ -2391,7 +2391,7 @@ The following commands are available:
     (list
      (vector
       (if (get 'org-agenda-files 'org-restrict)
-	  "Restricted to single file"
+	  "Restricted to Single File"
 	"Edit File List")
       '(org-edit-agenda-file-list)
       (not (get 'org-agenda-files 'org-restrict)))
@@ -9665,7 +9665,7 @@ if it was hidden in the outline."
 (defun org-agenda-cycle-show (&optional n)
   "Show the current entry in another window, with default settings.
 
-Default settings are taken from `org-show-context-detail'.  When
+Default settings are taken from `org-fold-show-context-detail'.  When
 use repeatedly in immediate succession, the remote entry will
 cycle through visibility
 

@@ -2175,8 +2175,8 @@ keywords before output."
 ;; Filters properties are installed in communication channel with
 ;; `org-export-install-filters' function.
 ;;
-;; Eventually, two hooks (`org-export-before-processing-hook' and
-;; `org-export-before-parsing-hook') are run at the beginning of the
+;; Eventually, two hooks (`org-export-before-processing-functions' and
+;; `org-export-before-parsing-functions') are run at the beginning of the
 ;; export process and just before parsing to allow for heavy structure
 ;; modifications.
 
@@ -3100,7 +3100,7 @@ still inferior to file-local settings."
                                org-export-options-alist))))
         tree modified-tick)
     ;; Run first hook with current backend's name as argument.
-    (run-hook-with-args 'org-export-before-processing-hook
+    (run-hook-with-args 'org-export-before-processing-functions
                         (org-export-backend-name backend))
     (org-export-expand-include-keyword nil nil nil nil (plist-get info :expand-links))
     (org-export--delete-comment-trees)
@@ -3128,7 +3128,7 @@ still inferior to file-local settings."
     ;; before parsing.
     (goto-char (point-min))
     (save-excursion
-      (run-hook-with-args 'org-export-before-parsing-hook
+      (run-hook-with-args 'org-export-before-parsing-functions
                           (org-export-backend-name backend)))
     (unless (eq modified-tick (buffer-chars-modified-tick))
       (org-set-regexps-and-options)
@@ -7447,9 +7447,22 @@ Toggle export options when required.  Otherwise, return value is
 a list with action as CAR and a list of interactive export
 options as CDR."
   (let (key)
-    ;; Scrolling: when in non-expert mode, act on motion keys (C-n,
-    ;; C-p, SPC, DEL).
-    (while (and (setq key (read-char-exclusive prompt))
+    ;; Scrolling: When in non-expert mode, act on motion keys (C-n,
+    ;; C-p, SPC, DEL), and translate down/up arrow keys and scroll
+    ;; wheel to C-n/C-p, respectively.
+    (while (and (setq key
+                      (pcase (read-event prompt)
+                        ((or 'up
+                             `(wheel-up . ,_)
+                             `(double-wheel-up . ,_)
+                             `(triple-wheel-up . ,_))
+                         ?\C-p)
+                        ((or 'down
+                             `(wheel-down . ,_)
+                             `(double-wheel-down . ,_)
+                             `(triple-wheel-down . ,_))
+                         ?\C-n)
+                        (event event)))
 		(not expertp)
 		;; FIXME: Don't use C-v (22) here, as it is used as a
 		;; modifier key in the export dispatch.

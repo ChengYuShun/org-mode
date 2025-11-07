@@ -25,7 +25,7 @@
 
 (require 'org-test "../testing/org-test")
 (require 'org-agenda)
-(eval-and-compile (require 'cl-lib))
+(eval-when-compile (require 'cl-lib))
 
 
 ;; General auxiliaries
@@ -46,8 +46,10 @@
   (declare (indent 1))
   `(org-test-with-temp-text-in-file ,text
      (let ((org-agenda-files `(,buffer-file-name)))
-       ,@body
-       (org-test-agenda--kill-all-agendas))))
+       (unwind-protect
+           (progn
+             ,@body)
+         (org-test-agenda--kill-all-agendas)))))
 
 
 ;; Test the Agenda
@@ -97,7 +99,10 @@
       (set-buffer org-agenda-buffer-name)
       (save-excursion
         (goto-char (point-min))
-        (should (search-forward "8:00...... now - - - - - - - - - - - - - - - - - - - - - - - - -")))
+        (should (search-forward
+                 (concat "8:00"
+                         (string-pad (nth 2 org-agenda-time-grid) 7)
+                         org-agenda-current-time-string))))
       (save-excursion
         (goto-char (point-min))
         (should (search-forward "agenda-file2: 9:30-10:00 Scheduled:  TODO one")))
@@ -106,13 +111,17 @@
         (should (search-forward "agenda-file2:10:00-12:30 Scheduled:  TODO two")))
       (save-excursion
         (goto-char (point-min))
-        (should (search-forward "10:00...... ----------------")))
+        (should (search-forward (concat "10:00"
+                                        (string-pad (nth 2 org-agenda-time-grid) 7)
+                                        (nth 3 org-agenda-time-grid)))))
       (save-excursion
         (goto-char (point-min))
         (should (search-forward "agenda-file2:13:00-15:00 Scheduled:  TODO three")))
       (save-excursion
         (goto-char (point-min))
-        (should (search-forward "agenda-file2:19:00...... Scheduled:  TODO four"))))
+        (should (search-forward (concat "agenda-file2:19:00"
+                                        (string-pad (nth 2 org-agenda-time-grid) 7)
+                                        "Scheduled:  TODO four")))))
     (org-test-agenda--kill-all-agendas))
   ;; Custom time grid strings
   (org-test-at-time "2024-01-17 8:00"
@@ -376,11 +385,13 @@ See https://list.orgmode.org/06d301d83d9e$f8b44340$ea1cc9c0$@tomdavey.com"
     ;; `org-today' or not.
     (org-agenda-list nil "<2017-07-19 Wed>")
     (set-buffer org-agenda-buffer-name)
-    (should
-     (progn (goto-line 3)
-	    (org-agenda-priority ?B)
-	    (looking-at-p " *agenda-file:Scheduled: *\\[#B\\] test agenda"))))
-  (org-test-agenda--kill-all-agendas))
+    (unwind-protect
+        (should
+         (progn (goto-line 3)
+                (org-agenda-priority ?B)
+                (looking-at-p " *agenda-file:Scheduled: *\\[#B\\] test agenda")))
+      (org-test-agenda--kill-all-agendas)
+      (org-test-kill-buffer "agenda-file.org"))))
 
 (ert-deftest test-org-agenda/sticky-agenda-name ()
   "Agenda buffer name after having created one sticky agenda buffer."

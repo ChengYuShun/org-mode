@@ -18,6 +18,19 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 # require user action for most Org mode users.
 # Sorted from most important to least important.
 
+*** ~org-babel-lob-ingest~ no longer performs noweb expansion when ingesting blocks
+
+Previously, ~org-babel-lob-ingest~ would expand noweb references when
+adding source blocks to the Library of Babel.  Now, blocks are stored
+with unexpanded noweb references.
+
+Noweb expansion is handled appropriately when blocks are actually used
+via ~org-babel-execute-src-block~ or ~org-babel-exp-do-export~, with
+the correct context (~:tangle~, ~:export~, or ~:eval~).
+
+This change is unlikely to affect most users, but code that directly
+accesses ~org-babel-library-of-babel~ may observe the difference.
+
 *** ~org-store-link~ no longer asks to select store function when called noninteractively
 
 Previously, when multiple store functions are available to store link
@@ -243,6 +256,15 @@ When editing Dot source blocks, Org now uses Graphviz Dot mode, if installed.
 
 Org now officially enables C# code block evaluation based on the .NET SDK.
 
+*** =ob-ditaa=: ditaa executable, and SVG output
+
+In order to use a ditaa executable instead of a JAR file, you can set
+=org-ditaa-default-exec-mode= to ='ditaa=.  The location of the
+executable can be configured via =org-ditaa-exec=.
+
+SVG output can now be generated; note, however, that this requires a
+ditaa version of at least 0.11.0.
+
 ** New and changed options
 
 # Changes dealing with changing default values of customizations,
@@ -410,9 +432,53 @@ symbol ~attach~ or a string -- directory name.  Now it can also be a
 function, which will be called with no arguments and its return value
 will be used as a directory to save the image to.
 
+*** ~org-refile-targets~ can now match all headlines in the target file(s)
+
+Candidate refile targets may now be specified with the symbol ~t~ to
+indicate that all headlines within the specified file are to be
+considered.  For example, setting ~org-refile-targets~ to ~((nil
+. t))~ will allow one to refile to any heading within the current
+buffer.
+
+*** ~org-odt-with-latex~ accepts any method from ~org-preview-latex-process-alist~
+
+Previously, only a few conversion methods (~dvipng~, ~imagemagick~,
+~dvisvgm~) could be used to render LaTeX fragments as images when
+exporting to ODT.  Now any method in ~org-preview-latex-process-alist~
+can be used.
+
+*** New option ~org-latex-mathml-directory~
+
+This option specifies the path where MathML files generated from LaTeX
+fragments are stored.
+
+*** =ob-ditaa=: output type control
+
+Output file type is determined as specified in Babel documentation:
+the suffix of =:file= is the primary determinant, and =:file-ext=
+secondary.  Header arguments =:pdf= and =:eps= are supported for
+backwards compatibility.  Default output type is still PNG.
+
 ** New functions and changes in function arguments
 
 # This also includes changes in function behavior from Elisp perspective.
+
+*** ~org-attach-attach~ now returns a link to file stored
+
+Previously, ~org-attach-attach~ did not have any specified default value.
+Now, it returns a list =(LINK DESCRIPTION)= to the file stored.
+The link obeys non-nil ~org-attach-store-link-p~ setting.
+When ~org-attach-store-link-p~ is nil, an =attachment:= link is returned.
+
+*** New functions exposing link formatting done by ~org-insert-link~
+
+New function ~org-link-get-description~ exposes handling ~:insert-description~
+link parameter and ~org-link-make-description-function~.
+
+New function ~org-link-make-string-for-buffer~ exposes link and description
+cleanups performed by ~org-insert-link~, including cleaning up =<...>= brackets,
+stripping current buffer file path from the link, and adjusting =file:= links
+according to ~org-link-file-path-type~.
 
 *** New function ~org-src-get-lang-mode-if-bound~
 
@@ -544,7 +610,28 @@ capture ~:tree-type~ options]], the internal variable
 ~org-datetree-base-level~ has been removed, as well as the
 undocumented helper function ~org-datetree-insert-line~.
 
+*** =ob-ditaa=: =org-babel-ditaa-java-cmd= renamed and =org-ditaa-jar-option= made obsolete
+
+To align with other customizable variable names, which do not contain
+the word =babel=, variable =org-babel-ditaa-java-cmd= has been renamed
+to =org-ditaa-java-exec=.  The old variable =org-babel-ditaa-java-cmd=
+is still available as an obsolete alias.
+
+Variable =org-ditaa-jar-option= did not serve any sensible purpose and
+has been made obsolete. Its value is still used in place of default
+parameter -jar if the variable is defined.
+
 ** Miscellaneous
+*** Inline tasks in a clocktable will be indented to a level below their heading
+
+Previously a clocktable that contained an inline task would show the
+task at the same indentation level as the heading that contains it.
+Now the inline task is indented to be one lower then its parent
+heading.
+
+This also fixes a bug where creating a clocktable that includes an
+inline task before any headings would cause an error.
+
 *** ~org-capture~ target pointing to headline is now handled uniformly for =plain= entry type
 
 Previously, when using ~file+regexp~, ~file+function~ or ~function~, =plain= entries
@@ -716,6 +803,20 @@ class="timestamp">~. Now, if both ~org-html-doctype~ is ~html5~ and
 additionally set the ~datetime~ attribute with a machine readable
 variant of the timestamp. The format used for the attribute can be
 customized using ~org-html-datetime-formats~.
+
+*** Export dispatcher supports arrow keys and mouse wheel
+
+Previously, the arrow keys and the mouse wheel were ignored in the
+export dispatcher, ~org-export-dispatch~ bound to =C-c C-e=.  Now,
+they scroll the text in the export dispatcher window.
+
+*** Add completion for ID links
+
+Completion is enabled for ID links inserted with ~org-insert-link~.
+Completion candidates, by default, will be sourced from all files
+known to contain headlines with IDs.  You can use new option
+~org-id-completion-targets~ to change where the candidates are
+searched.
 
 * Version 9.7
 

@@ -75,7 +75,8 @@ variable, and communication channel under `info'."
           "* Heading"
           (with-temp-buffer
             (insert-file-contents file)
-            (buffer-string)))))))
+            (buffer-string))))
+        (org-test-kill-buffer (current-buffer)))))
   ;; The copy must not show when re-opening the original file.
   (org-test-with-temp-text-in-file
       "* Heading"
@@ -93,58 +94,62 @@ variable, and communication channel under `info'."
 (ert-deftest test-org-export/bind-keyword ()
   "Test reading #+BIND: keywords."
   ;; Test with `org-export-allow-bind-keywords' set to t.
-  (should
-   (org-test-with-temp-text "#+BIND: test-ox-var value"
-     (let ((org-export-allow-bind-keywords t))
-       (org-export-get-environment)
-       (eq test-ox-var 'value))))
-  ;; Test with `org-export-allow-bind-keywords' set to nil.
-  (should-not
-   (org-test-with-temp-text "#+BIND: test-ox-var value"
-     (let ((org-export-allow-bind-keywords nil))
-       (org-export-get-environment)
-       (boundp 'test-ox-var))))
-  ;; BIND keywords are case-insensitive.
-  (should
-   (org-test-with-temp-text "#+bind: test-ox-var value"
-     (let ((org-export-allow-bind-keywords t))
-       (org-export-get-environment)
-       (eq test-ox-var 'value))))
-  ;; Preserve order of BIND keywords.
-  (should
-   (org-test-with-temp-text "#+BIND: test-ox-var 1\n#+BIND: test-ox-var 2"
-     (let ((org-export-allow-bind-keywords t))
-       (org-export-get-environment)
-       (eq test-ox-var 2))))
-  ;; Read BIND keywords in setup files.
-  (should
-   (org-test-with-temp-text
-       (format "#+SETUPFILE: \"%s/examples/setupfile.org\"" org-test-dir)
-     (let ((org-export-allow-bind-keywords t))
-       (org-export-get-environment)
-       ;; `variable' is bound inside the setupfile.
-       (eq variable 'value))))
-  ;; Verify that bound variables are seen during export.
-  (should
-   (equal "Yes\n"
-	  (org-test-with-temp-text "#+BIND: test-ox-var value"
-	    (let ((org-export-allow-bind-keywords t))
-	      (org-export-as
-	       (org-export-create-backend
-		:transcoders
-		'((section . (lambda (s c i)
-			       (if (eq test-ox-var 'value) "Yes" "No"))))))))))
-  ;; Seen from elisp code blocks as well.
-  (should
-   (string-match-p "::: \"test value\""
-	           (org-test-with-temp-text "#+BIND: test-ox-var \"test value\"
+  (with-suppressed-warnings ((free-vars test-ox-var))
+    (should
+     (org-test-with-temp-text "#+BIND: test-ox-var value"
+       (let ((org-export-allow-bind-keywords t))
+         (org-export-get-environment)
+         (eq test-ox-var 'value))))
+    ;; Test with `org-export-allow-bind-keywords' set to nil.
+    (should-not
+     (org-test-with-temp-text "#+BIND: test-ox-var value"
+       (let ((org-export-allow-bind-keywords nil))
+         (org-export-get-environment)
+         (boundp 'test-ox-var))))
+    ;; BIND keywords are case-insensitive.
+    (should
+     (org-test-with-temp-text "#+bind: test-ox-var value"
+       (let ((org-export-allow-bind-keywords t))
+         (org-export-get-environment)
+         (eq test-ox-var 'value))))
+    ;; Preserve order of BIND keywords.
+    (should
+     (org-test-with-temp-text "#+BIND: test-ox-var 1\n#+BIND: test-ox-var 2"
+       (let ((org-export-allow-bind-keywords t))
+         (org-export-get-environment)
+         (eq test-ox-var 2))))
+    ;; Read BIND keywords in setup files.
+    (should
+     (org-test-with-temp-text
+         (format "#+SETUPFILE: \"%s/examples/setupfile.org\"" org-test-dir)
+       (let ((org-export-allow-bind-keywords t))
+         (org-export-get-environment)
+         ;; `variable' is bound inside the setupfile.
+         (with-suppressed-warnings ((free-vars variable))
+           (eq variable 'value)))))
+    ;; Verify that bound variables are seen during export.
+    (should
+     (equal
+      "Yes\n"
+      (org-test-with-temp-text "#+BIND: test-ox-var value"
+        (let ((org-export-allow-bind-keywords t))
+          (org-export-as
+           (org-export-create-backend
+            :transcoders
+            '((section . (lambda (s c i)
+                           (if (eq test-ox-var 'value) "Yes" "No"))))))))))
+    ;; Seen from elisp code blocks as well.
+    (should
+     (string-match-p
+      "::: \"test value\""
+      (org-test-with-temp-text "#+BIND: test-ox-var \"test value\"
 
 #+begin_src emacs-lisp :results value :exports results :eval yes
 (format \"::: %S\" test-ox-var)
 #+end_src"
-	             (let ((org-export-allow-bind-keywords t))
-	               (org-export-as
-	                (org-test-default-backend)))))))
+        (let ((org-export-allow-bind-keywords t))
+          (org-export-as
+           (org-test-default-backend))))))))
 
 (ert-deftest test-org-export/parse-option-keyword ()
   "Test reading all standard #+OPTIONS: items."
@@ -1856,12 +1861,12 @@ Footnotes[fn:2], foot[fn:test] and [fn:inline:inline footnote]
 	    (buffer-string)))))
 
 (ert-deftest test-org-export/before-processing-hook ()
-  "Test `org-export-before-processing-hook'."
+  "Test `org-export-before-processing-functions'."
   (should
    (equal
     "#+macro: mac val\nTest\n"
     (org-test-with-temp-text "#+MACRO: mac val\n{{{mac}}} Test"
-      (let ((org-export-before-processing-hook
+      (let ((org-export-before-processing-functions
 	     '((lambda (backend)
 		 (while (re-search-forward "{{{" nil t)
 		   (let ((object (org-element-context)))
@@ -1871,17 +1876,17 @@ Footnotes[fn:2], foot[fn:test] and [fn:inline:inline footnote]
 			(org-element-property :end object)))))))))
 	(org-export-as (org-test-default-backend)))))))
 
-(ert-deftest test-org-export/before-parsing-hook ()
-  "Test `org-export-before-parsing-hook'."
+(ert-deftest test-org-export/before-parsing-functions ()
+  "Test `org-export-before-parsing-functions'."
   (should
    (equal "Body 1\nBody 2\n"
 	  (org-test-with-temp-text "* Headline 1\nBody 1\n* Headline 2\nBody 2"
-	    (let ((org-export-before-parsing-hook
+	    (let ((org-export-before-parsing-functions
 		   '((lambda (backend)
 		       (goto-char (point-min))
 		       (while (re-search-forward org-outline-regexp-bol nil t)
 			 (delete-region
-			  (point-at-bol) (progn (forward-line) (point))))))))
+			  (line-beginning-position) (progn (forward-line) (point))))))))
 	      (org-export-as (org-test-default-backend)))))))
 
 

@@ -100,6 +100,19 @@
 (defvar org-fold-core-style)
 
 
+;;; Emacs < 31 compatibility
+(if (fboundp 'completion-table-with-metadata)
+    (defalias 'org-completion-table-with-metadata #'completion-table-with-metadata)
+  (defun org-completion-table-with-metadata (table metadata)
+    "Return new completion TABLE with METADATA.
+METADATA should be an alist of completion metadata.  See
+`completion-metadata' for a list of supported metadata."
+    (lambda (string pred action)
+      (if (eq action 'metadata)
+          `(metadata . ,metadata)
+        (complete-with-action action table string pred)))))
+
+
 ;;; Emacs < 29 compatibility
 
 (if (fboundp 'display-buffer-full-frame)
@@ -1747,19 +1760,21 @@ ELEMENT is the element at point."
 		  (when (looking-at-p "\\>") (backward-char))
 		  (org-element-context element))))
     (cl-case (org-element-type object)
-      ;; Prevent checks in links due to keybinding conflict with
-      ;; Flyspell.
       ((citation citation-reference code entity export-snippet inline-babel-call
-	         inline-src-block line-break latex-fragment link macro
+	         inline-src-block line-break latex-fragment macro
 	         statistics-cookie target timestamp verbatim)
        nil)
+      (link
+       ;; Only check link description
+       (when-let* ((cbeg (org-element-contents-begin object))
+                   (cend (org-element-contents-end object)))
+         (<= cbeg (point) cend)))
       (footnote-reference
        ;; Only in inline footnotes, within the definition.
        (and (eq (org-element-property :type object) 'inline)
-	    (< (save-excursion
-		 (goto-char (org-element-begin object))
-		 (search-forward ":" nil t 2))
-	       (point))))
+            (<= (org-element-contents-begin object)
+               (point)
+               (org-element-contents-end object))))
       (otherwise t))))
 
 (defun org-mode-flyspell-verify ()
@@ -1902,7 +1917,7 @@ key."
 ;;;; Simple
 
 (defun org-mark-jump-unhide (&rest _)
-  "Make the point visible with `org-show-context' after jumping to the mark."
+  "Make the point visible with `org-fold-show-context' after jumping to the mark."
   (when (and (derived-mode-p 'org-mode)
 	     (org-invisible-p))
     (org-fold-show-context 'mark-goto)))
