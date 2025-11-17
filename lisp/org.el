@@ -73,7 +73,7 @@
 
 ;;;; Require other packages
 
-(require 'org-compat)
+(require 'org-macs)
 (org-assert-version)
 
 (require 'cl-lib)
@@ -95,7 +95,7 @@
    (message "You need to run \"make\" or \"make autoloads\" from Org lisp directory")
    (sit-for 3)))
 
-(eval-and-compile (require 'org-macs))
+(require 'org-macs)
 (require 'org-compat)
 (require 'org-keys)
 (require 'ol)
@@ -134,7 +134,6 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-agenda-todo-yesterday "org-agenda" (&optional arg))
 (declare-function org-agenda-list "org-agenda" (&optional arg start-day span with-hour))
 (declare-function org-agenda-redo "org-agenda" (&optional all))
-(declare-function org-agenda-remove-restriction-lock "org-agenda" (&optional noupdate))
 (declare-function org-archive-subtree "org-archive" (&optional find-done))
 (declare-function org-archive-subtree-default "org-archive" ())
 (declare-function org-archive-to-archive-sibling "org-archive" ())
@@ -150,7 +149,6 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-clock-get-last-clock-out-time "org-clock" ())
 (declare-function org-clock-goto "org-clock" (&optional select))
 (declare-function org-clock-in "org-clock" (&optional select start-time))
-(declare-function org-clock-in-last "org-clock" (&optional arg))
 (declare-function org-clock-out "org-clock" (&optional switch-to-state fail-quietly at-time))
 (declare-function org-clock-out-if-current "org-clock" ())
 (declare-function org-clock-remove-overlays "org-clock" (&optional beg end noremove))
@@ -167,24 +165,22 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-duration-to-minutes "org-duration" (duration &optional canonical))
 (declare-function org-element-at-point "org-element" (&optional pom cached-only))
 (declare-function org-element-at-point-no-context "org-element" (&optional pom))
-(declare-function org-element-cache-refresh "org-element" (pos))
 (declare-function org-element-cache-reset "org-element" (&optional all no-persistence))
 (declare-function org-element-cache-map "org-element" (func &rest keys))
 (declare-function org-element-contents "org-element-ast" (node))
 (declare-function org-element-context "org-element" (&optional element))
-(declare-function org-element-copy "org-element-ast" (datum))
+(declare-function org-element-copy "org-element-ast" (datum &optional keep-contents))
 (declare-function org-element-create "org-element-ast" (type &optional props &rest children))
 (declare-function org-element-extract "org-element-ast" (node))
 (declare-function org-element-insert-before "org-element-ast" (node location))
 (declare-function org-element-interpret-data "org-element" (data))
-(declare-function org-element-keyword-parser "org-element" (limit affiliated))
 (declare-function org-element-lineage "org-element-ast" (blob &optional types with-self))
 (declare-function org-element-property-inherited "org-element-ast"
                   (property node &optional with-self accumulate literal-nil include-nil))
 (declare-function org-element-lineage-map "org-element-ast"
                   (datum fun &optional types with-self first-match))
 (declare-function org-element-link-parser "org-element" ())
-(declare-function org-element-map "org-element" (data types fun &optional info first-match no-recursion with-affiliated))
+(declare-function org-element-map "org-element" (data types fun &optional info first-match no-recursion with-affiliated no-undefer))
 (declare-function org-element-nested-p "org-element" (elem-a elem-b))
 (declare-function org-element-parse-buffer "org-element" (&optional granularity visible-only keep-deferred))
 (declare-function org-element-parse-secondary-string "org-element" (string restriction &optional parent))
@@ -208,11 +204,8 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-feed-goto-inbox "org-feed" (feed))
 (declare-function org-feed-update-all "org-feed" ())
 (declare-function org-goto "org-goto" (&optional alternative-interface))
-(declare-function org-id-find-id-file "org-id" (id))
 (declare-function org-id-get-create "org-id" (&optional force))
-(declare-function org-inlinetask-at-task-p "org-inlinetask" ())
 (declare-function org-inlinetask-outline-regexp "org-inlinetask" ())
-(declare-function org-inlinetask-toggle-visibility "org-inlinetask" ())
 (declare-function org-latex-make-preamble "ox-latex" (info &optional template snippet?))
 (declare-function org-num-mode "org-num" (&optional arg))
 (declare-function org-plot/gnuplot "org-plot" (&optional params))
@@ -221,11 +214,8 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-timer "org-timer" (&optional restart no-insert))
 (declare-function org-timer-item "org-timer" (&optional arg))
 (declare-function org-timer-pause-or-continue "org-timer" (&optional stop))
-(declare-function org-timer-set-timer "org-timer" (&optional opt))
 (declare-function org-timer-start "org-timer" (&optional offset))
-(declare-function org-timer-stop "org-timer" ())
 (declare-function org-toggle-archive-tag "org-archive" (&optional find-done))
-(declare-function org-update-radio-target-regexp "ol" ())
 
 (defvar org-agenda-buffer-name)
 (defvar org-element-paragraph-separate)
@@ -3955,15 +3945,9 @@ This is needed for font-lock setup.")
 (declare-function calendar-iso-to-absolute "cal-iso" (date))
 (declare-function cdlatex-compute-tables "ext:cdlatex" ())
 (declare-function cdlatex-tab "ext:cdlatex" ())
-(declare-function dired-get-filename
-		  "dired"
-		  (&optional localp no-error-if-not-filep))
 (declare-function org-agenda-change-all-lines
 		  "org-agenda"
 		  (newhead hdmarker &optional fixface just-this))
-(declare-function org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item
-		  "org-agenda"
-		  (&optional end))
 (declare-function org-agenda-copy-local-variable "org-agenda" (var))
 (declare-function org-agenda-format-item
 		  "org-agenda"
@@ -3975,16 +3959,12 @@ This is needed for font-lock setup.")
 		  (beg end))
 (declare-function org-agenda-set-restriction-lock "org-agenda" (&optional type))
 (declare-function org-agenda-skip "org-agenda" (&optional element))
-(declare-function org-attach-expand "org-attach" (file))
 (declare-function org-attach-reveal "org-attach" ())
 (declare-function org-attach-reveal-in-emacs "org-attach" ())
-(declare-function org-gnus-follow-link "org-gnus" (&optional group article))
 (declare-function org-indent-mode "org-indent" (&optional arg))
-(declare-function org-inlinetask-goto-beginning "org-inlinetask" ())
 (declare-function org-inlinetask-goto-end "org-inlinetask" ())
 (declare-function org-inlinetask-in-task-p "org-inlinetask" ())
-(declare-function org-inlinetask-remove-END-maybe "org-inlinetask" ())
-(declare-function parse-time-string "parse-time" (string))
+(declare-function parse-time-string "parse-time" (string &optional form))
 
 (defvar align-mode-rules-list)
 (defvar calc-embedded-close-formula)
@@ -3996,8 +3976,6 @@ This is needed for font-lock setup.")
 
 (declare-function org-clock-save-markers-for-cut-and-paste "org-clock" (beg end))
 (declare-function org-clock-update-mode-line "org-clock" (&optional refresh))
-(declare-function org-resolve-clocks "org-clock"
-		  (&optional also-non-dangling-p prompt last-valid))
 
 (defvar org-clock-start-time)
 (defvar org-clock-marker (make-marker)
@@ -4158,7 +4136,6 @@ Otherwise, these types are allowed:
 
 ;; Declare ID code
 
-(declare-function org-id-store-link "org-id")
 (declare-function org-id-locations-load "org-id")
 (declare-function org-id-locations-save "org-id")
 (defvar org-id-track-globally)
@@ -5194,6 +5171,9 @@ The following commands are available:
   (org-setup-filling)
   ;; Comments.
   (org-setup-comments-handling)
+  ;; Obey the syntax-table text property when navigating text (used in
+  ;; source blocks).
+  (setq-local parse-sexp-lookup-properties t)
   ;; Beginning/end of defun
   (setq-local beginning-of-defun-function 'org-backward-element)
   (setq-local end-of-defun-function
@@ -5643,10 +5623,6 @@ by a #."
 	   limit t)
       (let ((beg (match-beginning 0))
 	    (end-of-beginline (match-end 0))
-	    ;; Including \n at end of #+begin line will include \n
-	    ;; after the end of block content.
-	    (block-start (match-end 0))
-	    (block-end nil)
 	    (lang (match-string 7)) ; The language, if it is a source block.
 	    (bol-after-beginline (line-beginning-position 2))
 	    (dc1 (downcase (match-string 2)))
@@ -5672,7 +5648,6 @@ by a #."
 	    (setq beg-of-endline (match-beginning 0)
 		  end-of-endline (match-end 0)
 		  nl-before-endline (1- (match-beginning 0)))
-	    (setq block-end (match-beginning 0)) ; Include the final newline.
 	    (when quoting
 	      (org-remove-flyspell-overlays-in bol-after-beginline nl-before-endline)
 	      (remove-text-properties beg end-of-endline
@@ -5683,6 +5658,8 @@ by a #."
 	    (org-remove-flyspell-overlays-in nl-before-endline end-of-endline)
             (cond
 	     ((and org-src-fontify-natively
+                   ;; Skip fontification of empty source-blocks
+                   (< bol-after-beginline beg-of-endline)
                    ;; Technically, according to the
                    ;; `org-src-fontify-natively' docstring, we should
                    ;; only fontify src blocks.  However, it is common
@@ -5692,8 +5669,8 @@ by a #."
                    ;; for user convenience.
                    (member block-type '("src" "export" "example")))
 	      (save-match-data
-                (org-src-font-lock-fontify-block (or lang "") block-start block-end))
-	      (add-text-properties bol-after-beginline block-end '(src-block t)))
+                (org-src-font-lock-fontify-block (or lang "") bol-after-beginline beg-of-endline))
+	      (add-text-properties bol-after-beginline beg-of-endline '(src-block t)))
 	     (quoting
 	      (add-text-properties
 	       bol-after-beginline beg-of-endline
@@ -6354,7 +6331,8 @@ If TAG is a number, get the corresponding match group."
     (remove-text-properties beg end
 			    '(mouse-face t keymap t org-linked-text t
 					 invisible t intangible t
-					 org-emphasis t))
+					 org-emphasis t
+                                         syntax-table t))
     (org-fold-core-update-optimisation beg end)
     (org-remove-font-lock-display-properties beg end)))
 
@@ -11855,7 +11833,7 @@ See also `org-scan-tags'."
 		   (mm
 		    (cond
 		     (regexp			; [2]
-                      `(with-syntax-table org-mode-tags-syntax-table
+                      `(org-with-syntax-table org-mode-tags-syntax-table
                          (org-match-any-p ,(substring tag 1 -1) tags-list)))
 		     (propp
 		      (let* (;; Determine property name.
@@ -12009,7 +11987,7 @@ the list of tags in this group."
 	    (add-text-properties
 	     (match-beginning 0) (match-end 0) '(regexp t) return-match)))
 	;; For each tag token found in MATCH, compute a regexp and  it
-	(with-syntax-table org-mode-tags-syntax-table
+	(org-with-syntax-table org-mode-tags-syntax-table
 	  (replace-regexp-in-string
 	   key-regexp
 	   (lambda (m)
@@ -12299,9 +12277,15 @@ This works in the agenda, and also in an Org buffer."
 
 (defun org-tags-completion-function (string _predicate &optional flag)
   "Complete tag STRING.
+
+The format for tag string is described in the
+Info node `(org) Matching tags and properties'.
+
 FLAG specifies the type of completion operation to perform.  This
 function is passed as a collection function to `completing-read',
 which see."
+  ;; FIXME: This function is used to complete a tag string which can
+  ;; include properties but does not know anything about properties
   (let ((completion-ignore-case nil)	;tags are case-sensitive
 	(confirm (lambda (x) (stringp (car x))))
 	(prefix "")
@@ -12315,7 +12299,7 @@ which see."
       (`lambda (assoc string org-last-tags-completion-table)) ;exact match?
       (`(boundaries . ,suffix)
        (let ((end (if (string-match "[-+:&,|]" suffix)
-                      (match-string 0 suffix)
+                      (match-beginning 0)
                     (length suffix))))
          `(boundaries ,(or begin 0) . ,end)))
       (`nil
@@ -17210,7 +17194,7 @@ This uses the `org-mode-transpose-word-syntax-table' syntax
 table, which interprets characters in `org-emphasis-alist' as
 word constituents."
   (interactive)
-  (with-syntax-table org-mode-transpose-word-syntax-table
+  (org-with-syntax-table org-mode-transpose-word-syntax-table
     (call-interactively 'transpose-words)))
 
 (defvar org-ctrl-c-ctrl-c-hook nil
@@ -18348,8 +18332,7 @@ Use `\\[org-edit-special]' to edit table.el tables")))
                     (= (point) (org-element-end context))))
            (save-excursion
              (if (org-at-TBLFM-p)
-                 (progn (require 'org-table)
-                        (org-table-calc-current-TBLFM))
+                 (org-table-calc-current-TBLFM)
                (goto-char (org-element-contents-begin context))
                (org-call-with-arg 'org-table-recalculate (or arg t))
                (orgtbl-send-table 'maybe))))
@@ -19817,16 +19800,17 @@ Also align node properties according to `org-property-format'."
                            org-edit-src-content-indentation)))))
                ;; Avoid over-indenting when beginning of a new line is not empty.
                ;; https://list.orgmode.org/OMCpuwZ--J-9@phdk.org/
-               (when block-content-ind
-                 (save-excursion (indent-line-to block-content-ind)))
-               (ignore-errors ; do not err when there is no proper major mode
-                 ;; It is important to call `indent-according-to-mode'
-                 ;; rather than `indent-line-function' here or we may
-                 ;; sometimes break `electric-indent-mode'
-                 ;; https://orgmode.org/list/5O9VMGb6WRaqeHR5_NXTb832Z2Lek_5L40YPDA52-S3kPwGYJspI8kLWaGtuq3DXyhtHpj1J7jTIXb39RX9BtCa2ecrWHjijZqI8QAD742U=@proton.me
-                 (org-babel-do-in-edit-buffer (indent-according-to-mode)))
-               (when (and block-content-ind (looking-at-p "^$"))
-                 (indent-line-to block-content-ind))))
+               (with-undo-amalgamate
+                 (when block-content-ind
+                   (save-excursion (indent-line-to block-content-ind)))
+                 (ignore-errors ; do not err when there is no proper major mode
+                   ;; It is important to call `indent-according-to-mode'
+                   ;; rather than `indent-line-function' here or we may
+                   ;; sometimes break `electric-indent-mode'
+                   ;; https://orgmode.org/list/5O9VMGb6WRaqeHR5_NXTb832Z2Lek_5L40YPDA52-S3kPwGYJspI8kLWaGtuq3DXyhtHpj1J7jTIXb39RX9BtCa2ecrWHjijZqI8QAD742U=@proton.me
+                   (org-babel-do-in-edit-buffer (indent-according-to-mode)))
+                 (when (and block-content-ind (looking-at-p "^$"))
+                   (indent-line-to block-content-ind)))))
 	    (t
 	     (let ((column (org--get-expected-indentation element nil)))
 	       ;; Preserve current column.
@@ -20120,7 +20104,7 @@ width for filling.
 
 For convenience, when point is at a plain list, an item or
 a footnote definition, try to fill the first paragraph within."
-  (with-syntax-table org-mode-transpose-word-syntax-table
+  (org-with-syntax-table org-mode-transpose-word-syntax-table
     ;; Move to end of line in order to get the first paragraph within
     ;; a plain list or a footnote definition.
     (let ((element (save-excursion (end-of-line) (org-element-at-point))))
@@ -21507,19 +21491,19 @@ Optional argument ELEMENT contains element at point."
 (defun org-at-keyword-p nil
   "Return t if cursor is at a keyword-line."
   (save-excursion
-    (move-beginning-of-line 1)
+    (forward-line 0)
     (looking-at org-keyword-regexp)))
 
 (defun org-at-drawer-p nil
   "Return t if cursor is at a drawer keyword."
   (save-excursion
-    (move-beginning-of-line 1)
+    (forward-line 0)
     (looking-at org-drawer-regexp)))
 
 (defun org-at-block-p nil
   "Return t if cursor is at a block keyword."
   (save-excursion
-    (move-beginning-of-line 1)
+    (forward-line 0)
     (looking-at org-block-regexp)))
 
 (defun org-point-at-end-of-empty-headline ()

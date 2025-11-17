@@ -110,10 +110,8 @@ Version mismatch is commonly encountered in the following situations:
 (declare-function org-mode "org" ())
 (declare-function org-agenda-files "org" (&optional unrestricted archives))
 (declare-function org-time-string-to-seconds "org" (s))
-(declare-function org-fold-show-context "org-fold" (&optional key))
 (declare-function org-fold-save-outline-visibility "org-fold" (use-markers &rest body))
 (declare-function org-fold-next-visibility-change "org-fold" (&optional pos limit ignore-hidden-p previous-p))
-(declare-function org-fold-core-with-forced-fontification "org-fold" (&rest body))
 (declare-function org-fold-folded-p "org-fold" (&optional pos limit ignore-hidden-p previous-p))
 (declare-function org-time-convert-to-list "org-compat" (time))
 (declare-function org-buffer-text-pixel-width "org-compat" ())
@@ -275,6 +273,16 @@ This function is only useful when called from Agenda buffer."
   (declare (debug (form body)) (indent 0))
   `(cl-letf (((symbol-function #'org-element--cache-active-p) (lambda (&rest _) nil)))
      ,@body))
+
+(defmacro org-with-syntax-table (table &rest body)
+  "Evaluate BODY with syntax table of current buffer set to TABLE.
+
+This is the same as `with-syntax-table' except that it also binds
+`parse-sexp-lookup-properties' to nil."
+  (declare (debug t) (indent 1))
+  `(with-syntax-table ,table
+     (let ((parse-sexp-lookup-properties nil))
+       ,@body)))
 
 
 ;;; Buffer and windows

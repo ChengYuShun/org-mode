@@ -68,7 +68,6 @@
 (declare-function org-element-post-affiliated "org-element" (node))
 (declare-function org-encrypt-entry "org-crypt" ())
 (declare-function org-insert-link "ol" (&optional complete-file link-location default-description))
-(declare-function org-link-make-string "ol" (link &optional description))
 (declare-function org-table-analyze "org-table" ())
 (declare-function org-table-current-dline "org-table" ())
 (declare-function org-table-fix-formulas "org-table" (key replace &optional limit delta remove))
@@ -2092,7 +2091,7 @@ marked Sexp are evaluated when this argument is nil."
        ;; Only mark valid and non-escaped sexp.
        ((org-capture-escaped-%) nil)
        (t
-	(let ((end (with-syntax-table emacs-lisp-mode-syntax-table
+	(let ((end (org-with-syntax-table emacs-lisp-mode-syntax-table
 		     (ignore-errors (scan-sexps (1- (point)) 1)))))
 	  (when end
 	    (put-text-property (- (point) 2) end 'org-embedded-elisp t))))))))

@@ -76,16 +76,13 @@
 (require 'org-table)
 (require 'org-fold-core)
 
-(declare-function org-at-heading-p "org" (&optional _))
 (declare-function org-escape-code-in-string "org-src" (s))
 (declare-function org-src-preserve-indentation-p "org-src" (&optional node))
 (declare-function org-macro-escape-arguments "org-macro" (&rest args))
 (declare-function org-macro-extract-arguments "org-macro" (s))
-(declare-function org-reduced-level "org" (l))
 (declare-function org-unescape-code-in-string "org-src" (s))
 (declare-function org-inlinetask-outline-regexp "org-inlinetask" ())
 (declare-function outline-next-heading "outline" ())
-(declare-function outline-previous-heading "outline" ())
 
 (defvar org-complex-heading-regexp)
 (defvar org-done-keywords)
@@ -513,7 +510,7 @@ past the brackets."
 			  (_ nil)))
 	  (pos (point)))
       (when syntax-table
-	(with-syntax-table syntax-table
+	(org-with-syntax-table syntax-table
 	  (let ((end (ignore-errors (scan-lists pos 1 0))))
 	    (when end
 	      (goto-char end)
@@ -565,8 +562,6 @@ The resulting function can be evaluated at a later time, from
 another buffer, effectively cloning the original buffer there.
 
 The function assumes BUFFER's major mode is `org-mode'."
-  (declare-function org-fold-core--update-buffer-folds "org-fold-core" ())
-  (require 'org-fold-core)
   (with-current-buffer buffer
     (let ((str (unless drop-contents
                  (org-with-wide-buffer
@@ -3411,7 +3406,7 @@ Assume point is at the beginning of the citation."
                         (match-string-no-properties 1))))
 	   ;; Ignore blanks between cite type and prefix or key.
 	   (start (match-end 0))
-	   (closing (with-syntax-table org-element--pair-square-table
+	   (closing (org-with-syntax-table org-element--pair-square-table
 		      (ignore-errors (scan-lists begin 1 0)))))
       (save-excursion
 	(when (and closing
@@ -3652,7 +3647,7 @@ When at a footnote reference, return a new syntax node of
 `:end', `:contents-begin', `:contents-end' and `:post-blank' as
 properties.  Otherwise, return nil."
   (when (looking-at org-footnote-re)
-    (let ((closing (with-syntax-table org-element--pair-square-table
+    (let ((closing (org-with-syntax-table org-element--pair-square-table
 		     (ignore-errors (scan-lists (point) 1 0)))))
       (when closing
 	(save-excursion
@@ -8563,7 +8558,7 @@ This function may modify the match data."
               (org-element-at-point (1+ epom) cached-only))))))))
 
 ;;;###autoload
-(defsubst org-element-at-point-no-context (&optional pom)
+(defun org-element-at-point-no-context (&optional pom)
   "Quickly find element at point or POM.
 
 It is a faster version of `org-element-at-point' that is not
