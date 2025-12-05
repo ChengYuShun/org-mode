@@ -1362,9 +1362,9 @@ Throw `:org-element-deferred-retry' signal at the end."
                                (org-element--get-cached-string (match-string-no-properties 1)))))
 	     (todo-type
 	      (and todo (if (member todo org-done-keywords) 'done 'todo)))
-	     (priority (and (looking-at "\\[#.\\][ \t]*")
-			    (progn (goto-char (match-end 0))
-				   (aref (match-string 0) 2))))
+	     (priority (and (looking-at org-priority-regexp)
+                            (progn (goto-char (match-end 0))
+                                   (org-priority-to-value (match-string 2)))))
 	     (commentedp
 	      (and (let ((case-fold-search nil))
                      (looking-at org-element--headline-comment-re))
@@ -1522,8 +1522,8 @@ CONTENTS is the contents of the element."
 	  (concat (make-string (if org-odd-levels-only (1- (* level 2)) level)
 			       ?*)
 		  (and todo (concat " " todo))
+		  (and priority (format " [#%s]" (org-priority-to-string priority)))
 		  (and commentedp (concat " " org-element-comment-string))
-		  (and priority (format " [#%c]" priority))
 		  " "
 		  (if (and org-footnote-section
 			   (org-element-property :footnote-section-p headline))
@@ -1742,7 +1742,7 @@ CONTENTS is the contents of inlinetask."
 		      (format ":%s:" (mapconcat 'identity tag-list ":")))))
 	 (task (concat (make-string level ?*)
 		       (and todo (concat " " todo))
-		       (and priority (format " [#%c]" priority))
+		       (and priority (format " [#%s]" (org-priority-to-string priority)))
 		       (and title (concat " " title)))))
     (concat task
 	    ;; Align tags.
@@ -7083,6 +7083,14 @@ If you observe Emacs hangs frequently, please report this to Org mode mailing li
                (unless (save-excursion
                          (org-skip-whitespace)
                          (eobp))
+                 (unless (>= end (point))
+                   (org-element--cache-warn
+                    "Invalid LIMIT boundary during parsing. Please report it to Org mode mailing list (M-x org-submit-bug-report).\n Backtrace:\n%S"
+                    (when (and (fboundp 'backtrace-get-frames)
+                               (fboundp 'backtrace-to-string))
+                      (backtrace-to-string (backtrace-get-frames 'backtrace))
+                      (org-element-cache-reset)
+                      (error "org-element--cache: Emergency exit"))))
                  (setq element (org-element--current-element
 			        end 'element mode
 			        (org-element-property :structure parent))))
