@@ -81,6 +81,7 @@ lorem ipsum dolor\\\\
 lorem ipsum dolor\\\\
 \\end{verse}")))
   ;; Footnotes inside verse blocks
+
   (org-test-with-exported-text
       'latex
       "#+begin_verse
@@ -142,6 +143,33 @@ Column & Column \\\\
      (search-forward
       "\\hline\\multicolumn{2}{r}{Continued on next page} \\\\
 \\endfoot"))))
+
+(ert-deftest test-ox-latex/table-el-table ()
+  "Test table export with table.el table and :rmlines."
+  (org-test-with-exported-text
+      'latex
+      "#+attr_latex: :rmlines yes
++--------------------------+-----------+
+|   ... better than ...    | ... times |
++--------------+-----------+-----------+
+| PostgreSQL   | MySQL     |     2     |
++--------------+-----------+-----------+
+| PostgreSQL   | MongoDB   |     2     |
++--------------+-----------+-----------+
+| MongoDB      | MySQL     |     2     |
++--------------+-----------+-----------+
+"
+    (goto-char (point-min))
+    (should
+     (search-forward
+      "\\begin{tabular}{|l|l|l|}
+\\multicolumn{2}{|l|}{... better than ...} & ... times \\\\
+\\hline
+PostgreSQL & MySQL & 2 \\\\
+PostgreSQL & MongoDB & 2 \\\\
+MongoDB & MySQL & 2 \\\\
+\\end{tabular}"
+      ))))
 
 (ert-deftest test-ox-latex/inline-image ()
   "Test inline images."
@@ -272,6 +300,79 @@ is suppressed
       (should (search-forward "}
 \\addcontentsline{toc}{section}{Section 3}")))))
 
+(ert-deftest test-ox-latex/use-sans ()
+  "Test `org-latex-use-sans' set to t."
+  (let ((org-latex-use-sans t))
+    (org-test-with-exported-text 'latex
+        "#+TITLE: Test sans fonts
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should (search-forward "\\renewcommand*\\familydefault{\\sfdefault}" nil t))
+      (should (search-forward "\\begin{document}" nil t)))))
+
+(ert-deftest test-ox-latex/use-sans-option ()
+  "Test latex-use-sans in OPTIONS set to t."
+  (org-test-with-exported-text 'latex
+"#+TITLE: Test sans fonts
+#+OPTIONS: latex-use-sans:t
+
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should (search-forward "\\renewcommand*\\familydefault{\\sfdefault}" nil t))
+      (should (search-forward "\\begin{document}" nil t))))
+
+(ert-deftest test-ox-latex/use-sans-default ()
+  "Test `org-latex-use-sans' default setting."
+  (org-test-with-exported-text 'latex
+                               "#+TITLE: Test no sans fonts
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should-not (search-forward "\\renewcommand*\\familydefault{\\sfdefault}" nil t))
+      (goto-char (point-min))
+      (should (search-forward "\\begin{document}" nil t))))
+
+(ert-deftest test-ox-latex/use-sans-override ()
+  "Test `org-latex-use-sans' overriding variable."
+  (let ((org-latex-use-sans t))
+    (org-test-with-exported-text 'latex
+                                 "#+TITLE: Test no sans fonts
+#+OPTIONS: latex-use-sans:nil
+
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should-not (search-forward "\\renewcommand*\\familydefault{\\sfdefault}" nil t))
+      (goto-char (point-min))
+      (should (search-forward "\\begin{document}" nil t)))))
+
+(ert-deftest test-ox-latex/latex-class-pre ()
+  "Test #+LATEX_CLASS_PRE"
+  (org-test-with-exported-text 'latex
+                               "#+LATEX_CLASS_PRE: \\PassOptionsToPackage{dvipsnames}{xcolor}
+#+TITLE: Test prepending LaTeX before the preamble
+
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should (search-forward "\\PassOptionsToPackage{dvipsnames}{xcolor}" nil t))
+      ;; And after this
+      (should (search-forward "\\documentclass" nil t))
+      ;; And after this
+      (should (search-forward "\\begin{document}" nil t))))
+
 (ert-deftest test-ox-latex/math-in-alt-title ()
   "Test math wrapping in ALT_TITLE properties."
   (org-test-with-exported-text
@@ -299,6 +400,14 @@ is suppressed
 * [#42] Test
 "
    (goto-char (point-min))
+   (should (search-forward "\\framebox{\\#42}")))
+  ;; Test inline task (level >= org-inlinetask-min-level, default 15)
+  (org-test-with-exported-text
+   'latex
+   "#+OPTIONS: pri:t inline:t
+***************** [#42] Test
+"
+   (goto-char (point-min))
    (should (search-forward "\\framebox{\\#42}"))))
 
 (ert-deftest test-ox-latex/alphabetical-priority-headline ()
@@ -307,6 +416,14 @@ is suppressed
    'latex
    "#+OPTIONS: pri:t
 * [#C] Test
+"
+   (goto-char (point-min))
+   (should (search-forward "\\framebox{\\#C}")))
+  ;; Test inline task (level >= org-inlinetask-min-level, default 15)
+  (org-test-with-exported-text
+   'latex
+   "#+OPTIONS: pri:t inline:t
+***************** [#C] Test
 "
    (goto-char (point-min))
    (should (search-forward "\\framebox{\\#C}"))))

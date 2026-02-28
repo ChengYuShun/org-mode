@@ -1,6 +1,6 @@
 ;;; ob-lisp.el --- Babel Functions for Common Lisp   -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Authors: Joel Boehland
 ;;	 Eric Schulte
@@ -66,8 +66,9 @@ Valid values include `slime-eval' and `sly-eval'."
 For example a value of \"(progn ;; %s\\n   %%s)\" would ignore the
 current directory string."
   :group 'org-babel
-  :version "24.1"
-  :type 'string)
+  :package-version '(Org . "9.8")
+  :type 'string
+  :safe nil)
 
 (defun org-babel-expand-body:lisp (body params)
   "Expand BODY according to PARAMS, return the expanded body."

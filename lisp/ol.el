@@ -1,6 +1,6 @@
 ;;; ol.el --- Org links library                      -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2018-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -52,6 +52,9 @@
 (declare-function org-before-first-heading-p "org" ())
 (declare-function org-do-occur "org" (regexp &optional cleanup))
 (declare-function org-element-at-point "org-element" (&optional pom cached-only))
+(declare-function org-element-parse-secondary-string "org-element"
+                  (string restriction &optional parent))
+(declare-function org-element-restriction "org-element" (element))
 (declare-function org-element-cache-refresh "org-element" (pos))
 (declare-function org-element-cache-reset "org-element" (&optional all no-persistence))
 (declare-function org-element-context "org-element" (&optional element))
@@ -210,9 +213,10 @@ link.
   Face used when hovering over the link.  Default is
   `highlight'."
   :group 'org-link
-  :package-version '(Org . "9.1")
+  :package-version '(Org . "9.8")
   :type '(alist :tag "Link display parameters"
-		:value-type plist))
+		:value-type plist)
+  :safe nil)
 
 (defun org-link--set-link-display (symbol value)
   "Set `org-link-descriptive' (SYMBOL) to VALUE.
@@ -385,7 +389,8 @@ another window."
 	  (cons (const wl)
 		(choice
 		 (const wl)
-		 (const wl-other-frame)))))
+		 (const wl-other-frame))))
+  :safe nil)
 
 (defcustom org-link-search-must-match-exact-headline 'query-to-create
   "Control fuzzy link behavior when specific matches not found.
@@ -498,7 +503,7 @@ The following %-escapes will be replaced by corresponding information:
 %T   full \"To\" field
 %t   first name in \"To\" field, address if no name
 %c   correspondent.  Usually \"from NAME\", but if you sent it yourself, it
-     will be \"to NAME\".  See also the variable `org-from-is-user-regexp'.
+     will be \"to NAME\".  See also the variable `org-link-from-user-regexp'.
 %s   subject
 %d   date
 %m   message-id.
@@ -541,22 +546,26 @@ links more efficient."
   :safe #'booleanp)
 
 (defcustom org-link-preview-delay 0.05
-  "Idle delay in seconds between link previews when using
-`org-link-preview'.  Links are previewed in batches (see
+  "Idle delay in seconds between link previews when using `org-link-preview'.
+Links are previewed in batches (see
 `org-link-preview-batch-size') spaced out by this delay.  Set
 this to a small number for more immediate previews, but at the
 expense of higher lag."
   :group 'org-link
-  :type 'number)
+  :package-version '(Org . "9.8")
+  :type 'number
+  :safe t)
 
 (defcustom org-link-preview-batch-size 6
-  "Number of links that are previewed at once with
-`org-link-preview'.  Links are previewed asynchronously, in
+  "Number of links that are previewed at once with `org-link-preview'.
+Links are previewed asynchronously, in
 batches spaced out in time (see `org-link-preview-delay').  Set
 this to a large integer for more immediate previews, but at the
 expense of higher lag."
   :group 'org-link
-  :type 'natnum)
+  :package-version '(Org . "9.8")
+  :type 'natnum
+  :safe t)
 
 (defcustom org-display-remote-inline-images 'skip
   "How to display remote inline images.
@@ -594,7 +603,8 @@ Possible values:
           (const :tag "Limit to `fill-column'" fill-column)
           (const :tag "Limit to window width" window)
           (integer :tag "Limit to a number of pixels")
-          (float :tag "Limit to a fraction of window width")))
+          (float :tag "Limit to a fraction of window width"))
+  :safe t)
 
 (defcustom org-image-align 'left
   "How to align images previewed using `org-link-preview-region'.
@@ -1628,7 +1638,7 @@ Abbreviations are defined in `org-link-abbrev-alist'."
             ((string-match "%(\\([^)]+\\))" rpl)
              (let ((rpl-fun-symbol (intern-soft (match-string 1 rpl))))
                ;; Using `unsafep-function' is not quite enough because
-               ;; Emacs considers functions like `genenv' safe, while
+               ;; Emacs considers functions like `getenv' safe, while
                ;; they can potentially be used to expose private system
                ;; data to attacker if abbreviated link is clicked.
                (if (or (eq t (get rpl-fun-symbol 'org-link-abbrev-safe))
@@ -1720,6 +1730,9 @@ Optional argument ARG is passed to `org-open-file' when S is a
 	     (goto-char (point-min))
 	     (org-element-link-parser)))
     (`nil (user-error "No valid link in %S" s))
+    ((and link (guard (not (equal (org-element-end link) (1+ (length s))))))
+     (user-error "Garbage after link in %S (%S)"
+                 s (substring s (1- (org-element-end link)))))
     (link (org-link-open link arg))))
 
 (defun org-link-search (s &optional avoid-pos stealth new-heading-container)
@@ -2173,11 +2186,26 @@ buffer boundaries with possible narrowing."
         (forward-char -1)               ;ensure we are on the link
         (when-let*
             ((link (org-element-lineage (org-element-context) 'link t))
+             (path (or
+                    ;; Link without description or link with description
+                    ;; that is requested to be previewed anyway.
+                    (and (or include-linked
+                             (not (org-element-contents-begin link)))
+                         (org-element-property :path link))
+                    ;; Special case: link with description where
+                    ;; description is itself a sole link
+                    (and (org-element-contents-begin link)
+                         (setq link
+                               (org-with-point-at (org-element-contents-begin link)
+                                 (org-element-put-property
+                                  (org-element-link-parser) :parent link)))
+                         (org-element-type-p link 'link)
+                         (equal (org-element-end link)
+                                (org-element-contents-end
+                                 (org-element-parent link)))
+                         (org-element-property :path link))))
              (linktype (org-element-property :type link))
-             (preview-func (org-link-get-parameter linktype :preview))
-             (path (and (or include-linked
-                            (not (org-element-contents-begin link)))
-                        (org-element-property :path link))))
+             (preview-func (org-link-get-parameter linktype :preview)))
           ;; Create an overlay to hold the preview
           (let ((ov (or (cdr-safe (get-char-property-and-overlay
                                    (org-element-begin link) 'org-image-overlay))

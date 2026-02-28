@@ -1,6 +1,6 @@
 ;;; org-macs.el --- Top-level Definitions for Org -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Maintainer: Ihor Radchenko <yantar92 at posteo dot net>
@@ -246,26 +246,37 @@ This function is only useful when called from Agenda buffer."
 (defmacro org-preserve-local-variables (&rest body)
   "Execute BODY while preserving local variables."
   (declare (debug (body)))
-  `(let ((local-variables
-	  (org-with-wide-buffer
-	   (goto-char (point-max))
-	   (let ((case-fold-search t))
-	     (and (re-search-backward "^[ \t]*# +Local Variables:"
-				      (max (- (point) 3000) 1)
-				      t)
-               (let ((buffer-undo-list t))
-	         (delete-and-extract-region (point) (point-max)))))))
-         (tick-counter-before (buffer-modified-tick)))
-     (unwind-protect (progn ,@body)
-       (when local-variables
-	 (org-with-wide-buffer
-	  (goto-char (point-max))
-	  (unless (bolp) (insert "\n"))
-          (let ((modified (< tick-counter-before (buffer-modified-tick)))
-                (buffer-undo-list t))
-	    (insert local-variables)
-            (unless modified
-              (restore-buffer-modified-p nil))))))))
+  (org-with-gensyms (local-variables tick-counter-before)
+    `(org-with-undo-amalgamate
+       (let ((,local-variables
+              (org-with-wide-buffer
+               (goto-char (point-max))
+               (let ((case-fold-search t))
+                 (and (re-search-backward
+                       ,(rx-let ((prefix
+                                  (seq line-start (zero-or-more whitespace)
+                                       "#" (one-or-more whitespace))))
+                          (rx prefix "Local Variables:"
+                              (one-or-more anychar)
+                              prefix "End:"
+                              (zero-or-more whitespace) (optional "\n")))
+                       (max (- (point) 3000) 1)
+                       t)
+                      (cons (match-beginning 0)
+                            (delete-and-extract-region (match-beginning 0)
+                                                         (match-end 0)))))))
+             (,tick-counter-before (buffer-modified-tick)))
+         (unwind-protect (progn ,@body)
+           (when ,local-variables
+             (org-with-wide-buffer
+              (let ((modified (< ,tick-counter-before (buffer-modified-tick))))
+                (if (not modified)
+                    (goto-char (car ,local-variables))
+                  (goto-char (point-max))
+                  (unless (bolp) (insert "\n")))
+	        (insert (cdr ,local-variables))
+                (unless modified
+                  (restore-buffer-modified-p nil))))))))))
 
 ;;;###autoload
 (defmacro org-element-with-disabled-cache (&rest body)
@@ -1159,6 +1170,9 @@ delimiting S."
 	     ((= cursor end) 0)
 	     (t (string-width (substring s cursor end)))))))
 
+(defvar org-string-width--old-emacs (version< emacs-version "28")
+  "When non-nil, use fallback behavior, primarily for old Emacs versions.")
+
 (defun org--string-width-1 (string)
   "Return width of STRING when displayed in the current buffer.
 Unlike `string-width', this function takes into consideration
@@ -1168,12 +1182,41 @@ Results may be off sometimes if it cannot handle a given
 `display' value."
   (org--string-from-props string 'display 0 (length string)))
 
-(defun org-string-width (string &optional pixels default-face)
+(defun org-string-width-invisibility-spec ()
+  "Return the invisibility spec of this buffer without folds and ellipses."
+  ;; We need to remove the folds to make sure that folded table
+  ;; alignment is not messed up.
+  (or (and (not (listp buffer-invisibility-spec))
+           buffer-invisibility-spec)
+      (let (result)
+        (dolist (el buffer-invisibility-spec)
+          (unless (or (memq el
+                            '(org-fold-drawer
+                              org-fold-block
+                              org-fold-outline))
+                      (and (listp el)
+                           (memq (car el)
+                                 '(org-fold-drawer
+                                   org-fold-block
+                                   org-fold-outline))))
+            (push
+             ;; Consider ellipsis to have 0 width.
+             ;; It is what Emacs 28+ does, but we have
+             ;; to force it in earlier Emacs versions.
+             (if (and (consp el) (cdr el))
+                 (list (car el))
+               el)
+             result)))
+        result)))
+
+(defun org-string-width (string &optional pixels default-face invisibility-spec)
   "Return width of STRING when displayed in the current buffer.
 Return width in pixels when PIXELS is non-nil.
 When PIXELS is nil, DEFAULT-FACE is the face used to calculate relative
-STRING width.  When REFERENCE-FACE is nil, `default' face is used."
-  (if (and (version< emacs-version "28") (not pixels))
+STRING width.  When REFERENCE-FACE is nil, `default' face is used.
+Use INVISIBILITY-SPEC when non-nil, otherwise construct one without
+folds and ellipses."
+  (if (and org-string-width--old-emacs (not pixels))
       ;; FIXME: Fallback to old limited version, because
       ;; `window-pixel-width' is buggy in older Emacs.
       (org--string-width-1 string)
@@ -1189,40 +1232,14 @@ STRING width.  When REFERENCE-FACE is nil, `default' face is used."
     ;; when PIXELS are requested though).
     (unless pixels
       (put-text-property 0 (length string) 'face (or default-face 'default) string))
-    (let (;; We need to remove the folds to make sure that folded table
-          ;; alignment is not messed up.
-          (current-invisibility-spec
-           (or (and (not (listp buffer-invisibility-spec))
-                    buffer-invisibility-spec)
-               (let (result)
-                 (dolist (el buffer-invisibility-spec)
-                   (unless (or (memq el
-                                     '(org-fold-drawer
-                                       org-fold-block
-                                       org-fold-outline))
-                               (and (listp el)
-                                    (memq (car el)
-                                          '(org-fold-drawer
-                                            org-fold-block
-                                            org-fold-outline))))
-                     (push el result)))
-                 result)))
+    (let ((current-invisibility-spec (or invisibility-spec (org-string-width-invisibility-spec)))
           (current-char-property-alias-alist char-property-alias-alist))
       (with-current-buffer (get-buffer-create " *Org string width*" t)
         (setq-local display-line-numbers nil)
         (setq-local line-prefix nil)
         (setq-local wrap-prefix nil)
         (setq-local buffer-invisibility-spec
-                    (if (listp current-invisibility-spec)
-                        (mapcar (lambda (el)
-                                  ;; Consider ellipsis to have 0 width.
-                                  ;; It is what Emacs 28+ does, but we have
-                                  ;; to force it in earlier Emacs versions.
-                                  (if (and (consp el) (cdr el))
-                                      (list (car el))
-                                    el))
-                                current-invisibility-spec)
-                      current-invisibility-spec))
+                    current-invisibility-spec)
         (setq-local char-property-alias-alist
                     current-char-property-alias-alist)
         (let (pixel-width symbol-width)
@@ -1855,6 +1872,13 @@ transient buffer) then return nil."
   (if-let* ((base-buffer (buffer-base-buffer buffer)))
       (buffer-file-name base-buffer)
     (buffer-file-name buffer)))
+
+(defun org-format-percent-cookie (completed total)
+  "Format the percent cookie `[N%]' for COMPLETED/TOTAL tasks.
+The percent is rounded down to the nearest integer, except for small
+percentages 0% < p < 1% which are rounded up to 1%."
+  (let ((p (floor (* 100.0 completed) (max 1 total))))
+    (format "[%d%%]" (if (and (= p 0) (> completed 0)) 1 p))))
 
 (provide 'org-macs)
 

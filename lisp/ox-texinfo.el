@@ -1,6 +1,6 @@
 ;;; ox-texinfo.el --- Texinfo Backend for Org Export Engine -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2012-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2026 Free Software Foundation, Inc.
 ;; Author: Jonathan Leech-Pepin <jonathan.leechpepin at gmail dot com>
 ;; Maintainer: Rudolf Adamkovič <rudolf@adamkovic.org>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -247,15 +247,15 @@ be placed after the end of the title."
 ;;;; Timestamps
 
 (defcustom org-texinfo-active-timestamp-format "@emph{%s}"
-  "A printf format string to be applied to active timestamps."
+  "A `format' string to be applied to active timestamps."
   :type 'string)
 
 (defcustom org-texinfo-inactive-timestamp-format "@emph{%s}"
-  "A printf format string to be applied to inactive timestamps."
+  "A `format' string to be applied to inactive timestamps."
   :type 'string)
 
 (defcustom org-texinfo-diary-timestamp-format "@emph{%s}"
-  "A printf format string to be applied to diary timestamps."
+  "A `format' string to be applied to diary timestamps."
   :type 'string)
 
 ;;;; Links
@@ -1171,7 +1171,7 @@ holding contextual information."
   "Default format function for a headline.
 See `org-texinfo-format-headline-function' for details."
   (concat (and todo (format "@strong{%s} " todo))
-	  (and priority (format "@emph{#%s} " priority))
+	  (and priority (format "@emph{#%s} " (org-priority-to-string priority)))
 	  text
 	  (and tags (concat " " (org-make-tag-string tags)))))
 
@@ -1209,7 +1209,7 @@ holding contextual information."
 See `org-texinfo-format-inlinetask-function' for details."
   (let ((full-title
 	 (concat (when todo (format "@strong{%s} " todo))
-		 (when priority (format "#%c " priority))
+		 (when priority (format "#%s " (org-priority-to-string priority)))
 		 title
 		 (when tags (org-make-tag-string tags)))))
     (format "@center %s\n\n%s\n" full-title contents)))
@@ -2061,6 +2061,8 @@ is the property list for the given project.  PUB-DIR is the
 publishing directory.
 
 Return output file name."
+  (require 'ox-publish)
+  (declare-function org-publish-org-to "ox-publish" (backend filename extension plist &optional pub-dir))
   (org-publish-org-to 'texinfo filename ".texi" plist pub-dir))
 
 ;;;###autoload

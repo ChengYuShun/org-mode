@@ -1,6 +1,6 @@
 ;;; org-element-ast.el --- Abstract syntax tree for Org  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2023-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2023-2026 Free Software Foundation, Inc.
 
 ;; Author: Ihor Radchenko <yantar92 at posteo dot net>
 ;; Maintainer: Ihor Radchenko <yantar92 at posteo dot net>
@@ -765,7 +765,7 @@ string.  Alternatively, TYPE can be a string.  When TYPE is nil or
                 (setq props (nbutlast props 2)
                       ptail nil)
               (setcar ptail (nth 2 ptail))
-              (setcdr ptail (seq-drop ptail 3))))))))
+              (setcdr ptail (cdddr ptail))))))))
   (pcase type
     ((or `nil `anonymous)
      (cl-assert (null props))

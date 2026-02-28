@@ -1,6 +1,6 @@
 ;;; ob-sql.el --- Babel Functions for SQL            -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Author: Eric Schulte
 ;; Maintainer: Daniel Kraus <daniel@kraus.my>
@@ -387,7 +387,7 @@ SET COLSEP '|'
 	      (goto-char (point-max))
 	      (forward-char -1))
 	    (write-file out-file))))
-	(org-table-import out-file (if (string= engine "sqsh") '(4) '(16)))
+	(org-table-import out-file (if (memq (intern engine) '(saphana sqsh)) '(4) '(16)))
 	(org-babel-reassemble-table
 	 (mapcar (lambda (x)
 		   (if (string= (car x) header-delim)

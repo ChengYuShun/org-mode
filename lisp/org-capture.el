@@ -1,6 +1,6 @@
 ;;; org-capture.el --- Fast note taking in Org       -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2010-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2010-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -374,6 +374,7 @@ be replaced with content and expanded:
               %-escapes, those can be used to fill the expression.
               The evaluation happens with Org mode set as major mode
               in a temporary buffer.
+              Examples: %(org-id-new), %(eval default-directory)
   %<...>      The result of `format-time-string' on the ... format
               specification.
   %t          Time stamp, date only.  The time stamp is the current
@@ -444,7 +445,7 @@ calendar                |  %:type %:date
 When you need to insert a literal percent sign in the template,
 you can escape ambiguous cases with a backward slash, e.g., \\%i."
   :group 'org-capture
-  :package-version '(Org . "9.7")
+  :package-version '(Org . "9.8")
   :set (lambda (s v) (set-default-toplevel-value s (org-capture-upgrade-templates v)))
   :type
   (let ((file-variants '(choice :tag "Filename       "
@@ -533,7 +534,8 @@ you can escape ambiguous cases with a backward slash, e.g., \\%i."
 				     ((const :format "%v " :tree-type) (const week))
 				     ((const :format "%v " :unnarrowed) (const t))
 				     ((const :format "%v " :table-line-pos) (string))
-				     ((const :format "%v " :kill-buffer) (const t)))))))))
+				     ((const :format "%v " :kill-buffer) (const t))))))))
+  :safe nil)
 
 (defcustom org-capture-before-finalize-hook nil
   "Hook that is run right before a capture process is finalized.
@@ -1043,7 +1045,7 @@ for `entry'-type templates"))
   (org-capture-put
    :initial-target-region
    ;; Check if the buffer is currently narrowed
-   (when (org-buffer-narrowed-p)
+   (when (buffer-narrowed-p)
      (cons (point-min) (point-max))))
   ;; store the current point
   (org-capture-put :initial-target-position (point)))
@@ -1745,7 +1747,10 @@ The template may still contain \"%?\" for cursor positioning.
 INITIAL content and/or ANNOTATION may be specified, but will be overridden
 by their respective `org-store-link-plist' properties if present.
 
-Expansion occurs in a temporary Org mode buffer."
+Expansion occurs in a temporary Org mode buffer that will be displayed
+if the template expansion triggers user prompt.  Beware that displaying
+the temporary buffer may alter point position in the already displayed
+buffers."
   (let* ((template (or template (org-capture-get :template)))
 	 (buffer (org-capture-get :buffer))
 	 (file (buffer-file-name (or (buffer-base-buffer buffer) buffer)))

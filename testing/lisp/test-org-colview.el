@@ -49,7 +49,7 @@
   (should
    (equal "%ITEM{+}"
           (org-columns-uncompile-format `(("ITEM" "ITEM" nil "+" nil)))))
-  ;; Read operator printf
+  ;; Read operator format
   (should
    (equal "%ITEM{+;%.1f}"
           (org-columns-uncompile-format  `(("ITEM" "ITEM" nil "+" "%.1f"))))))
@@ -86,7 +86,7 @@
    (equal `(("ITEM" "ITEM" nil "+" nil))
           (org-columns-compile-format
            "%ITEM{+}")))
-  ;; Read operator printf
+  ;; Read operator format
   (should
    (equal `(("ITEM" "ITEM" nil "+" "%.1f"))
           (org-columns-compile-format
@@ -1808,7 +1808,16 @@ there are 4 parameters
            "* [#15] Test"
            (let ((org-columns-default-format "%PRIORITY"))
              (org-columns)
-             (get-char-property (point) 'org-columns-value)))))  )
+             (get-char-property (point) 'org-columns-value)))))
+  ;; test default numeric priority
+  (should
+   (equal "15"
+          (org-test-with-temp-text
+           "* Test"
+           (let ((org-columns-default-format "%PRIORITY")
+                 (org-default-priority 15))
+             (org-columns)
+             (get-char-property (point) 'org-columns-value))))))
 
 (provide 'test-org-colview)
 ;;; test-org-colview.el ends here

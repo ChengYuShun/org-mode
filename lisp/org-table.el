@@ -1,6 +1,6 @@
 ;;; org-table.el --- The Table Editor for Org        -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -511,7 +511,7 @@ This may be useful when columns have been shrunk."
 (define-minor-mode org-table-header-line-mode
   "Display the first row of the table at point in the header line."
   :lighter " TblHeader"
-  (unless (eq major-mode 'org-mode)
+  (unless (derived-mode-p 'org-mode)
     (user-error "Cannot turn org table header mode outside org-mode buffers"))
   (if org-table-header-line-mode
       (add-hook 'post-command-hook #'org-table-header-set-header nil t)
@@ -919,8 +919,8 @@ nil      When nil, the command tries to be smart and figure out the
 	  (cond
 	   ((looking-at "^") (insert "| "))
 	   ((looking-at "[ \t]*$") (replace-match " |") (forward-line 1))
-	   ((looking-at "[ \t]*\"\\([^\"\n]*\\)\"")
-	    (replace-match "\\1")
+	   ((looking-at "[ \t]*\"\\([^\"]*\\)\"")
+	    (replace-match (replace-regexp-in-string "\n" " " (match-string 1)) t t)
 	    (if (looking-at "\"") (insert "\"")))
 	   ((looking-at "[^,\n]+") (goto-char (match-end 0)))
 	   ((looking-at "[ \t]*,") (replace-match " | "))
@@ -4376,11 +4376,12 @@ extension of the given file name, and finally on the variable
 	(user-error "TABLE_EXPORT_FORMAT invalid")))))
 
 ;;;###autoload
-(defun org-table--align-field (field width align)
+(defun org-table--align-field (field width align &optional field-width)
   "Format FIELD according to column WIDTH and alignment ALIGN.
 FIELD is a string.  WIDTH is a number.  ALIGN is either \"c\",
-\"l\" or\"r\"."
-  (let* ((spaces (- width (org-string-width field nil 'org-table)))
+\"l\" or\"r\".  If FIELD-WIDTH is non-nil, then it's used as
+FIELD's width.  Otherwise, it's calculated."
+  (let* ((spaces (- width (or field-width (org-string-width field nil 'org-table))))
 	 (prefix (pcase align
 		   ("l" "")
 		   ("r" (make-string spaces ?\s))
@@ -4409,7 +4410,16 @@ FIELD is a string.  WIDTH is a number.  ALIGN is either \"c\",
              (rows (remq 'hline table))
 	     (widths nil)
 	     (alignments nil)
-	     (columns-number 1))
+	     (columns-number 1)
+             (invisibility-spec (org-string-width-invisibility-spec))
+             (cell-width-cache (make-hash-table :test 'equal))
+             (get-or-compute-cell-width
+              (lambda (cell)
+                (or (gethash cell cell-width-cache)
+                    (puthash
+                     cell
+                     (org-string-width cell nil 'org-table invisibility-spec)
+                     cell-width-cache)))))
 	(if (null rows)
 	    ;; Table contains only horizontal rules.  Compute the
 	    ;; number of columns anyway, and choose an arbitrary width
@@ -4429,7 +4439,7 @@ FIELD is a string.  WIDTH is a number.  ALIGN is either \"c\",
 		  (non-empty 0))
 	      (dolist (row rows)
 		(let ((cell (or (nth i row) "")))
-		  (setq max-width (max max-width (org-string-width cell nil 'org-table)))
+		  (setq max-width (max max-width (funcall get-or-compute-cell-width cell)))
 		  (cond (fixed-align? nil)
 			((equal cell "") nil)
 			((string-match "\\`<\\([lrc]\\)[0-9]*>\\'" cell)
@@ -4470,10 +4480,16 @@ FIELD is a string.  WIDTH is a number.  ALIGN is either \"c\",
 				                  (append row
 						          (make-list offset "")))))
 			           (mapconcat #'identity
-				              (cl-mapcar #'org-table--align-field
-					                 fields
-					                 widths
-					                 alignments)
+				              (cl-mapcar
+                                               (lambda (field width alignment)
+                                                 (org-table--align-field
+                                                  field
+                                                  width
+                                                  alignment
+                                                  (funcall get-or-compute-cell-width field)))
+					       fields
+					       widths
+					       alignments)
 				              "|")))
 		               "|")))
 	          (if (equal new previous)

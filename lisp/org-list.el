@@ -1,6 +1,6 @@
 ;;; org-list.el --- Plain lists for Org              -*- lexical-binding: t; -*-
 ;;
-;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2026 Free Software Foundation, Inc.
 ;;
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;;	   Bastien Guerry <bzg@gnu.org>
@@ -2363,7 +2363,7 @@ is an integer, 0 means `-', 1 means `+' etc.  If WHICH is
 (define-minor-mode org-list-checkbox-radio-mode
   "When turned on, use list checkboxes as radio buttons."
   :lighter " CheckBoxRadio"
-  (unless (eq major-mode 'org-mode)
+  (unless (derived-mode-p 'org-mode)
     (user-error "Cannot turn this mode outside org-mode buffers")))
 
 (defun org-toggle-radio-button (&optional arg)
@@ -2546,10 +2546,6 @@ portion of the buffer."
       (let* ((cookie-re "\\(\\(\\[[0-9]*%\\]\\)\\|\\(\\[[0-9]*/[0-9]*\\]\\)\\)")
 	     (box-re "^[ \t]*\\([-+*]\\|\\([0-9]+\\|[A-Za-z]\\)[.)]\\)[ \t]+\
 \\(?:\\[@\\(?:start:\\)?\\([0-9]+\\|[A-Za-z]\\)\\][ \t]*\\)?\\(\\[[- X]\\]\\)")
-             (cookie-data (or (org-entry-get nil "COOKIE_DATA") ""))
-	     (recursivep
-	      (or (not org-checkbox-hierarchical-statistics)
-	          (string-match-p "\\<recursive\\>" cookie-data)))
 	     (within-inlinetask (and (not all)
 				     (featurep 'org-inlinetask)
 				     (org-inlinetask-in-task-p)))
@@ -2593,8 +2589,12 @@ portion of the buffer."
         ;; cookie, number of checked boxes to report and total number of
         ;; boxes.
         (while (re-search-forward cookie-re end t)
-          (let ((context (save-excursion (backward-char)
-				         (save-match-data (org-element-context)))))
+          (let* ((context (save-excursion (backward-char)
+				          (save-match-data (org-element-context))))
+                 (cookie-data (save-match-data (or (org-entry-get nil "COOKIE_DATA") "")))
+	         (recursivep
+	          (or (not org-checkbox-hierarchical-statistics)
+	              (string-match-p "\\<recursive\\>" cookie-data))))
 	    (when (and (org-element-type-p context 'statistics-cookie)
                        (not (string-match-p "\\<todo\\>" cookie-data)))
 	      (push
@@ -2656,8 +2656,7 @@ portion of the buffer."
 	    (goto-char beg)
             (org-fold-core-ignore-modifications
 	      (insert-and-inherit
-	       (if percent (format "[%d%%]" (floor (* 100.0 checked)
-					           (max 1 total)))
+	       (if percent (org-format-percent-cookie checked total)
 	         (format "[%d/%d]" checked total)))
 	      (delete-region (point) (+ (point) (- end beg))))
 	    (when org-auto-align-tags (org-fix-tags-on-the-fly))))))))

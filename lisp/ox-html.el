@@ -1,6 +1,6 @@
 ;;; ox-html.el --- HTML Backend for Org Export Engine -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;;      Jambunathan K <kjambunathan at gmail dot com>
@@ -313,6 +313,7 @@ This affects IDs that are determined from the ID property.")
   pre.src-asymptote:before { content: 'Asymptote'; }
   pre.src-awk:before { content: 'Awk'; }
   pre.src-authinfo::before { content: 'Authinfo'; }
+  pre.src-c:before { content: 'C'; }
   pre.src-C:before { content: 'C'; }
   /* pre.src-C++ doesn't work in CSS */
   pre.src-clojure:before { content: 'Clojure'; }
@@ -454,8 +455,9 @@ You can use `org-html-head' and `org-html-head-extra' to add to
 this style.  If you don't want to include this default style,
 customize `org-html-head-include-default-style'."
   :group 'org-export-html
-  :package-version '(Org . "9.5")
-  :type 'string)
+  :package-version '(Org . "9.8")
+  :type 'string
+  :safe t)
 
 
 ;;; User Configuration Variables
@@ -1174,7 +1176,8 @@ attribute.  See `format-time-string' for more information on its
 components."
   :type '(cons string string)
   :group 'org-export-html
-  :package-version '(Org . "9.8"))
+  :package-version '(Org . "9.8")
+  :safe t)
 
 ;;;; Template :: Mathjax
 
@@ -1565,7 +1568,8 @@ or for publication projects using the :html-head property."
   :group 'org-export-html
   :package-version '(Org . "9.8")
   :type '(choice (string :tag "Literal text to insert")
-                 (function :tag "Function evaluating to a string")))
+                 (function :tag "Function evaluating to a string"))
+  :safe t)
 ;;;###autoload
 (put 'org-html-head 'safe-local-variable 'stringp)
 
@@ -1579,7 +1583,8 @@ a string."
   :group 'org-export-html
   :package-version '(Org . "9.8")
   :type '(choice (string :tag "Literal text to insert")
-                 (function :tag "Function evaluating to a string")))
+                 (function :tag "Function evaluating to a string"))
+  :safe t)
 ;;;###autoload
 (put 'org-html-head-extra 'safe-local-variable 'stringp)
 
@@ -2362,7 +2367,8 @@ INFO is the info plist."
   "Format a priority into HTML.
 PRIORITY is the character code of the priority or nil.  INFO is
 a plist containing export options."
-  (and priority (format "<span class=\"priority\">[%c]</span>" priority)))
+  (and priority (format "<span class=\"priority\">[%s]</span>"
+                        (org-priority-to-string priority))))
 
 ;;;; Tags
 
@@ -3131,6 +3137,8 @@ Math environments match the regular expression defined in
 `org-latex-math-environments-re'.  This function is meant to be
 used as a predicate for `org-export-get-ordinal' or a value to
 `org-html-standalone-image-predicate'."
+  (require 'ox-latex)
+  (defvar org-latex-math-environments-re) ; defined in ox-latex.el
   (string-match-p org-latex-math-environments-re
                   (org-element-property :value element)))
 
@@ -3419,6 +3427,8 @@ INFO is a plist holding contextual information.  See
 	     (format "<a href=\"#%s\"%s>%s</a>" href attributes desc)))
 	  ;; Fuzzy link points to a target or an element.
 	  (_
+           (require 'ox-latex)
+           (declare-function org-latex--environment-type "ox-latex" (latex-environment))
            (if (and destination
                     (memq (plist-get info :with-latex) '(mathjax t))
                     (org-element-type-p destination 'latex-environment)

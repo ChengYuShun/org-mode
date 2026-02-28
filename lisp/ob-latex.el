@@ -1,6 +1,6 @@
 ;;; ob-latex.el --- Babel Functions for LaTeX        -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Author: Eric Schulte
 ;; Keywords: literate programming, reproducible research
@@ -77,13 +77,14 @@
 (defcustom org-babel-latex-preamble
   (lambda (_)
     "\\documentclass[preview]{standalone}
-\\def\\pgfsysdriver{pgfsys-tex4ht.def}
 ")
   "Closure which evaluates at runtime to the LaTeX preamble.
 
 It takes 1 argument which is the parameters of the source block."
   :group 'org-babel
-  :type 'function)
+  :package-version '(Org . "9.8")
+  :type 'function
+  :safe nil)
 
 (defcustom org-babel-latex-begin-env
   (lambda (_)
@@ -148,7 +149,8 @@ The following process symbols are recognized:
   :group 'org-babel
   :package-version '(Org . "9.8")
   :type '(alist :tag "LaTeX to image backends"
-		:value-type (plist)))
+		:value-type (plist))
+  :safe nil)
 
 (defun org-babel-expand-body:latex (body params)
   "Expand BODY according to PARAMS, return the expanded body."

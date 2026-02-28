@@ -1,6 +1,6 @@
 ;;; org-element.el --- Parser for Org Syntax         -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2012-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2026 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <n.goaziou at gmail dot com>
 ;; Maintainer: Ihor Radchenko <yantar92 at posteo dot net>
@@ -86,7 +86,7 @@
 
 (defvar org-complex-heading-regexp)
 (defvar org-done-keywords)
-(defvar org-edit-src-content-indentation)
+(defvar org-src-content-indentation)
 (defvar org-match-substring-regexp)
 (defvar org-odd-levels-only)
 (defvar org-property-drawer-re)
@@ -856,6 +856,48 @@ and END-OFFSET."
   (org-unescape-code-in-string
    (org-element--substring element beg-offset end-offset)))
 
+(defvar org-element--cache-diagnostics-level 2
+  "Detail level of the diagnostics.")
+
+(defvar-local org-element--cache-diagnostics-ring nil
+  "Ring containing cache process log entries.
+The ring size is `org-element--cache-diagnostics-ring-size'.")
+
+(defvar org-element--cache-diagnostics-ring-size 5000
+  "Size of `org-element--cache-diagnostics-ring'.")
+
+(defvar org-element--cache-self-verify nil
+  "Activate extra consistency checks for the cache.
+
+This may cause serious performance degradation depending on the value
+of `org-element--cache-self-verify-frequency'.
+
+When set to symbol `backtrace', record and display backtrace log if
+any inconsistency is detected.")
+
+(defmacro org-element--cache-warn (format-string &rest args)
+  "Raise warning for org-element-cache.
+FORMAT-STRING and ARGS are the same arguments as in `format'."
+  `(let* ((format-string (funcall #'format ,format-string ,@args))
+          (format-string
+           (if (or (not org-element--cache-diagnostics-ring)
+                   (not (eq 'backtrace org-element--cache-self-verify)))
+               format-string
+             (prog1
+                 (concat (format "Warning(%s): "
+                                 (buffer-name (current-buffer)))
+                         format-string
+                         "\nBacktrace:\n  "
+                         (mapconcat #'identity
+                                    (ring-elements org-element--cache-diagnostics-ring)
+                                    "\n  "))
+               (setq org-element--cache-diagnostics-ring nil)))))
+     (if (and (boundp 'org-batch-test) org-batch-test)
+         (error "%s" (concat "org-element--cache: " format-string))
+       (push (concat "org-element--cache: " format-string) org--warnings)
+       (display-warning '(org-element org-element-cache)
+                        (concat "org-element--cache: " format-string)))))
+
 
 ;;; Greater elements
 ;;
@@ -1372,10 +1414,13 @@ Throw `:org-element-deferred-retry' signal at the end."
 		     (goto-char (match-end 0))
                      (skip-chars-forward " \t"))))
 	     (title-start (point))
-	     (tags (when (re-search-forward
-			  "\\(:[[:alnum:]_@#%:]+:\\)[ \t]*$"
-			  (line-end-position)
-			  'move)
+	     (tags (when (progn
+                           ;; `org-tag-group-re' includes spaces before tags.
+                           ;; Start search before preceding spaces, if any.
+                           ;; If there are no spaces before point here,
+                           ;; We are not looking at the tags.
+                           (skip-chars-backward " \t")
+                           (re-search-forward org-tag-group-re (line-end-position) 'move))
 		     (goto-char (match-beginning 0))
                      (mapcar #'org-element--get-cached-string
 		             (org-split-string (match-string-no-properties 1) ":"))))
@@ -2000,6 +2045,14 @@ Return a new syntax node of `plain-list' type containing `:type',
 `:post-blank' and `:post-affiliated' properties.
 
 Assume point is at the beginning of the list."
+  (when (and structure (not (assq (point) structure)))
+    ;; STRUCT is corrupted - cannot find list inside.
+    (org-element--cache-warn
+     "Invalid :struct passed to plain-list parser at %S: %S
+If this warning appears regularly, please report the warning text to Org mode mailing list (M-x org-submit-bug-report)."
+     (point) structure)
+    ;; Try to recover
+    (setq structure nil))
   (save-excursion
     (let* ((struct (or structure (org-element--list-struct limit)))
 	   (type (cond ((looking-at-p "[ \t]*[A-Za-z0-9]") 'ordered)
@@ -2601,10 +2654,10 @@ Return a new syntax node of `example-block' type containing `:begin',
 	 (let ((val (org-element-property :value example-block)))
 	   (cond
 	    ((org-src-preserve-indentation-p example-block) val)
-	    ((= 0 org-edit-src-content-indentation)
+	    ((= 0 org-src-content-indentation)
 	     (org-remove-indentation val))
 	    (t
-	     (let ((ind (make-string org-edit-src-content-indentation ?\s)))
+	     (let ((ind (make-string org-src-content-indentation ?\s)))
 	       (replace-regexp-in-string "^[ \t]*\\S-"
 					 (concat ind "\\&")
 					 (org-remove-indentation val))))))))
@@ -3141,10 +3194,10 @@ Assume point is at the beginning of the block."
 	 (let ((val (org-element-property :value src-block)))
 	   (cond
 	    ((org-src-preserve-indentation-p src-block) val)
-	    ((zerop org-edit-src-content-indentation)
+	    ((zerop org-src-content-indentation)
 	     (org-remove-indentation val))
 	    (t
-	     (let ((ind (make-string org-edit-src-content-indentation ?\s)))
+	     (let ((ind (make-string org-src-content-indentation ?\s)))
 	       (replace-regexp-in-string "^[ \t]*\\S-"
 					 (concat ind "\\&")
 					 (org-remove-indentation val))))))))
@@ -5813,15 +5866,6 @@ seconds.")
   "Duration, as a time value, of the pause between synchronizations.
 See `org-element-cache-sync-duration' for more information.")
 
-(defvar org-element--cache-self-verify nil
-  "Activate extra consistency checks for the cache.
-
-This may cause serious performance degradation depending on the value
-of `org-element--cache-self-verify-frequency'.
-
-When set to symbol `backtrace', record and display backtrace log if
-any inconsistency is detected.")
-
 (defvar org-element--cache-self-verify-before-persisting nil
   "Perform consistency checks for the cache before writing to disk.
 
@@ -5843,16 +5887,6 @@ to be correct.  Setting this to a value less than 0.0001 is useless.")
 
 (defvar org-element--cache-map-statistics-threshold 0.1
   "Time threshold in seconds to log statistics for `org-element-cache-map'.")
-
-(defvar org-element--cache-diagnostics-level 2
-  "Detail level of the diagnostics.")
-
-(defvar-local org-element--cache-diagnostics-ring nil
-  "Ring containing cache process log entries.
-The ring size is `org-element--cache-diagnostics-ring-size'.")
-
-(defvar org-element--cache-diagnostics-ring-size 5000
-  "Size of `org-element--cache-diagnostics-ring'.")
 
 ;;;; Data Structure
 
@@ -6015,29 +6049,6 @@ FORMAT-STRING and ARGS are the same arguments as in `format'."
            (setq org-element--cache-diagnostics-ring
                  (make-ring org-element--cache-diagnostics-ring-size)))
          (ring-insert org-element--cache-diagnostics-ring format-string)))))
-
-(defmacro org-element--cache-warn (format-string &rest args)
-  "Raise warning for org-element-cache.
-FORMAT-STRING and ARGS are the same arguments as in `format'."
-  `(let* ((format-string (funcall #'format ,format-string ,@args))
-          (format-string
-           (if (or (not org-element--cache-diagnostics-ring)
-                   (not (eq 'backtrace org-element--cache-self-verify)))
-               format-string
-             (prog1
-                 (concat (format "Warning(%s): "
-                                 (buffer-name (current-buffer)))
-                         format-string
-                         "\nBacktrace:\n  "
-                         (mapconcat #'identity
-                                    (ring-elements org-element--cache-diagnostics-ring)
-                                    "\n  "))
-               (setq org-element--cache-diagnostics-ring nil)))))
-     (if (and (boundp 'org-batch-test) org-batch-test)
-         (error "%s" (concat "org-element--cache: " format-string))
-       (push (concat "org-element--cache: " format-string) org--warnings)
-       (display-warning '(org-element org-element-cache)
-                        (concat "org-element--cache: " format-string)))))
 
 (defsubst org-element--cache-key (element)
   "Return a unique key for ELEMENT in cache tree.

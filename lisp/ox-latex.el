@@ -1,6 +1,6 @@
 ;;; ox-latex.el --- LaTeX Backend for Org Export Engine -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2026 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <n.goaziou at gmail dot com>
 ;; Maintainer: Daniel Fleischer <danflscr@gmail.com>
@@ -124,6 +124,7 @@
     (:latex-class-options "LATEX_CLASS_OPTIONS" nil nil t)
     (:latex-header "LATEX_HEADER" nil nil newline)
     (:latex-header-extra "LATEX_HEADER_EXTRA" nil nil newline)
+    (:latex-class-pre "LATEX_CLASS_PRE" nil nil newline)
     (:description "DESCRIPTION" nil nil parse)
     (:keywords "KEYWORDS" nil nil parse)
     (:subtitle "SUBTITLE" nil nil parse)
@@ -170,6 +171,7 @@
     (:latex-title-command nil nil org-latex-title-command)
     (:latex-toc-command nil nil org-latex-toc-command)
     (:latex-compiler "LATEX_COMPILER" nil org-latex-compiler)
+    (:latex-use-sans nil "latex-use-sans" org-latex-use-sans)
     ;; Redefine regular options.
     (:date "DATE" nil "\\today" parse)))
 
@@ -703,17 +705,17 @@ The value will be passed as an argument to `format' as the following
 ;;;; Timestamps
 
 (defcustom org-latex-active-timestamp-format "\\textit{%s}"
-  "A printf format string to be applied to active timestamps."
+  "A `format' string to be applied to active timestamps."
   :group 'org-export-latex
   :type 'string)
 
 (defcustom org-latex-inactive-timestamp-format "\\textit{%s}"
-  "A printf format string to be applied to inactive timestamps."
+  "A `format' string to be applied to inactive timestamps."
   :group 'org-export-latex
   :type 'string)
 
 (defcustom org-latex-diary-timestamp-format "\\textit{%s}"
-  "A printf format string to be applied to diary timestamps."
+  "A `format' string to be applied to diary timestamps."
   :group 'org-export-latex
   :type 'string)
 
@@ -988,7 +990,7 @@ In addition, it is necessary to install pygments
 passed to pdflatex.
 
 The minted choice has possible repercussions on the preview of
-latex fragments (see `org-preview-latex-fragment').  If you run
+latex fragments (see `org-latex-preview').  If you run
 into previewing problems, please consult
 URL `https://orgmode.org/worg/org-tutorials/org-latex-preview.html'.
 
@@ -1414,6 +1416,10 @@ See also `org-latex-compiler'."
   :version "26.1"
   :package-version '(Org . "9.0"))
 
+(defconst org-latex-compilers '("pdflatex" "xelatex" "lualatex")
+  "Known LaTeX compilers.
+See also `org-latex-compiler'.")
+
 (defcustom org-latex-compiler "pdflatex"
   "LaTeX compiler to use.
 
@@ -1427,11 +1433,12 @@ Can also be set in buffers via #+LATEX_COMPILER.  See also
 	  (const :tag "LuaLaTeX" "lualatex")
 	  (const :tag "Unset" ""))
   :version "26.1"
-  :package-version '(Org . "9.0"))
-
-(defconst org-latex-compilers '("pdflatex" "xelatex" "lualatex")
-  "Known LaTeX compilers.
-See also `org-latex-compiler'.")
+  :package-version '(Org . "9.0")
+  :safe (lambda (s)
+          (and (stringp s)              ; must be a string
+               ;; either an empty string or one of the supported compilers
+               (or (length= s 0)
+                   (member s org-latex-compilers)))))
 
 (defcustom org-latex-bib-compiler "bibtex"
   "Command to process a LaTeX file's bibliography.
@@ -1973,6 +1980,15 @@ INFO is a plist used as a communication channel."
 	 (member (or compiler "") org-latex-compilers)
 	 (format org-latex-compiler-file-string compiler))))
 
+(defcustom org-latex-use-sans nil
+  "Whether to typeset the document with the Sans font family.
+
+The default behaviour is to typeset with the Roman font family."
+  :group 'org-export-latex
+  :package-version '(Org . "9.8")
+  :type 'boolean
+  :safe #'booleanp)
+
 
 ;;; Filters
 
@@ -2010,10 +2026,15 @@ specified in `org-latex-default-packages-alist' or
 	      (let* ((class-options (plist-get info :latex-class-options))
 		     (header (nth 1 (assoc class (plist-get info :latex-classes)))))
 		(and (stringp header)
-		     (if (not class-options) header
-		       (replace-regexp-in-string
-			"^[ \t]*\\\\documentclass\\(\\(\\[[^]]*\\]\\)?\\)"
-			class-options header t nil 1))))
+	             (mapconcat #'org-element-normalize-string
+		                (list
+                                 (and (not snippet?)
+                                      (plist-get info :latex-class-pre))
+		                 (if (not class-options) header
+		                   (replace-regexp-in-string
+			            "^[ \t]*\\\\documentclass\\(\\(\\[[^]]*\\]\\)?\\)"
+			            class-options header t nil 1)))
+                                nil)))
 	      (user-error "Unknown LaTeX class `%s'" class))))
     (org-latex-guess-polyglossia-language
      (org-latex-guess-babel-language
@@ -2027,7 +2048,11 @@ specified in `org-latex-default-packages-alist' or
 	 (mapconcat #'org-element-normalize-string
 		    (list (plist-get info :latex-header)
 			  (and (not snippet?)
-			       (plist-get info :latex-header-extra)))
+			       (plist-get info :latex-header-extra))
+                          (and (not snippet?)
+                               (plist-get info :latex-use-sans)
+                               "\\renewcommand*\\familydefault{\\sfdefault}"))
+
 		    ""))))
       info)
      info)))
@@ -2631,7 +2656,7 @@ holding contextual information."
 See `org-latex-format-inlinetask-function' for details."
   (let ((full-title
 	 (concat (when todo (format "\\textbf{\\textsf{\\textsc{%s}}} " todo))
-		 (when priority (format "\\framebox{\\#%c} " priority))
+		 (when priority (format "\\framebox{\\#%s} " (org-priority-to-string priority)))
 		 title
 		 (when tags
 		   (format "\\hfill{}\\textsc{%s}"
@@ -4095,10 +4120,12 @@ property."
 	;; When the "rmlines" attribute is provided, remove all hlines
 	;; but the one separating heading from the table body.
 	(let ((n 0) (pos 0))
-	  (while (and (< (length output) pos)
+	  (while (and (> (length output) pos)
 		      (setq pos (string-match "^\\\\hline\n?" output pos)))
 	    (cl-incf n)
-	    (unless (= n 2) (setq output (replace-match "" nil nil output))))))
+	    (if (= n 2)
+                (cl-incf pos)
+              (setq output (replace-match "" nil nil output))))))
       (org-latex--decorate-table output attr caption above? info))))
 
 (defun org-latex--math-table (table info)

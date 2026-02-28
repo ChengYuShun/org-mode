@@ -1,7 +1,8 @@
-;;; test-ob-clojure.el  -*- lexical-binding: t; -*-
+;;; test-org-mobile.el --- Tests for org-mobile.el -*- lexical-binding: t; -*-
 
-;; Copyright (c) 2018-2026 Free Software Foundation, Inc.
-;; Authors: stardiviner
+;; Copyright (C) 2025 Derek Chen-Becker
+
+;; Authors: Derek Chen-Becker <oss@chen-becker.org>
 
 ;; This file is not part of GNU Emacs.
 
@@ -18,17 +19,23 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-;;; Comments:
+;;; Commentary:
 
-;; Org tests for ob-clojure.el live here
+;; Unit tests for Org Mobile library.
 
 ;;; Code:
 
-(unless (featurep 'ob-clojure)
-  (signal 'missing-test-dependency '("Support for Clojure code blocks")))
+(require 'org-mobile)
 
-;; FIXME: The old tests where totally off.  We need to write new tests.
+(ert-deftest test-org-mobile/org-mobile-edit ()
+  "Test `org-mobile-edit' functionality."
+  (should
+   (equal "* [#42] H"
+          (let ((org-priority-highest 40)
+                (org-priority-lowest 50))
+            (org-test-with-temp-text "* [#48] H"
+              (org-mobile-edit 'priority "48" "42")
+              (buffer-string))))))
 
-(provide 'test-ob-clojure)
-
- ;;; test-ob-clojure.el ends here
+(provide 'test-org-mobile)
+;;; test-org-mobile.el ends here

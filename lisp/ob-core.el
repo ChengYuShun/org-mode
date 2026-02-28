@@ -1,6 +1,6 @@
 ;;; ob-core.el --- Working with Code Blocks          -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Authors: Eric Schulte
 ;;	Dan Davison
@@ -42,7 +42,7 @@
     nil))
 
 (defvar org-babel-library-of-babel)
-(defvar org-edit-src-content-indentation)
+(defvar org-src-content-indentation)
 (defvar org-link-file-path-type)
 (defvar org-src-lang-modes)
 (defvar org-babel-tangle-uncomment-comments)
@@ -2725,6 +2725,10 @@ result:
 			   (opening-line (concat "#+begin_" full))
 			   (closing-line (concat "#+end_" type)))
 		      (cond
+                       ;; Do nothing if type is "no" or "nil"
+                       ((or (org-string-equal-ignore-case type "nil")
+                            (org-string-equal-ignore-case type "no"))
+                        nil)
 		       ;; Escape contents from "export" wrap.  Wrap
 		       ;; inline results within an export snippet with
 		       ;; appropriate value.
@@ -2997,7 +3001,7 @@ used as a string to be appended to #+begin_example line."
 		      (indent-rigidly
 		       (point-min)
 		       (point-max)
-		       (+ ind org-edit-src-content-indentation))
+		       (+ ind org-src-content-indentation))
 		      (buffer-string))))))
       (delete-region body-start
 		     (org-with-wide-buffer
@@ -3069,6 +3073,8 @@ parameters when merging lists."
 		 (setf (cddr (nth variable-index vars))
 		       (concat (symbol-name name) "=" value))
 		 (cl-incf variable-index)))
+              ((null (cdr pair)) ;; Empty :var, ignore
+               nil)
 	      (t (error "Variable \"%s\" must be assigned a default value"
 			(cdr pair))))))
 	  (`(:results . ,value)

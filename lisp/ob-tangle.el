@@ -1,6 +1,6 @@
 ;;; ob-tangle.el --- Extract Source Code From Org Files -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Author: Eric Schulte
 ;; Keywords: literate programming, reproducible research
@@ -64,11 +64,12 @@ be inserted as the extension commonly used to identify files
 written in this language.  If no entry is found in this list,
 then the name of the language is used."
   :group 'org-babel-tangle
-  :version "24.1"
+  :package-version '(Org . "9.8")
   :type '(repeat
 	  (cons
 	   (string "Language name")
-	   (string "File Extension"))))
+	   (string "File Extension")))
+  :safe t)
 
 (defcustom org-babel-tangle-use-relative-file-links t
   "Use relative path names in links from tangled source back the Org file."

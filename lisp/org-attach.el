@@ -1,6 +1,6 @@
 ;;; org-attach.el --- Manage file attachments to Org outlines -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2008-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2008-2026 Free Software Foundation, Inc.
 
 ;; Author: John Wiegley <johnw@newartisans.com>
 ;; Keywords: org data attachment
@@ -873,7 +873,7 @@ Idea taken from `gnus-dired-attach'."
          (get-window-with-predicate
           (lambda (window)
             (with-current-buffer (window-buffer window)
-              (eq major-mode 'org-mode))))))
+              (derived-mode-p 'org-mode))))))
     (unless other-win
       (user-error
        "Can't attach to subtree.  No window displaying an Org buffer"))

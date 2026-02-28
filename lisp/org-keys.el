@@ -1,6 +1,6 @@
 ;;; org-keys.el --- Key bindings for Org mode        -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2018-2026 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;; Maintainer: Ihor Radchenko <yantar92 at posteo dot net>
@@ -159,6 +159,9 @@
 (declare-function org-previous-link "ol" ())
 (declare-function org-previous-visible-heading "org" (arg))
 (declare-function org-priority "org" (&optional action show))
+(defvar org-priority-highest)
+(defvar org-priority-default)
+(defvar org-priority-lowest)
 (declare-function org-promote-subtree "org" ())
 (declare-function org-refile "org-refile" (&optional arg1 default-buffer rfloc msg))
 (declare-function org-refile-copy "org-refile" ())
@@ -691,7 +694,10 @@ star at the beginning of the headline, you can do this:
   (setopt org-use-speed-commands
           (lambda ()
             (and (looking-at org-outline-regexp)
-                 (looking-back \"^\\\\**\"))))"
+                 (looking-back \"^\\\\**\"))))
+
+Note that prior to Emacs 29, `setopt' is unavailable, and
+`custom-set-variables' or `setq' is used instead."
   :group 'org-structure
   :type '(choice
 	  (const :tag "Never" nil)
@@ -754,10 +760,10 @@ hook.  The default setting is `org-speed-command-activate'."
     ("Meta Data Editing")
     ("t" . org-todo)
     ("," . (org-priority))
-    ("0" . (org-priority ?\ ))
-    ("1" . (org-priority ?A))
-    ("2" . (org-priority ?B))
-    ("3" . (org-priority ?C))
+    ("0" . (org-priority 'remove))
+    ("1" . (org-priority org-priority-highest))
+    ("2" . (org-priority org-priority-default))
+    ("3" . (org-priority org-priority-lowest))
     (":" . org-set-tags-command)
     ("e" . org-set-effort)
     ("E" . org-inc-effort)
@@ -783,7 +789,7 @@ interpreted as a descriptive headline that will be added when
 listing the speed commands in the Help buffer using the `?' speed
 command."
   :group 'org-structure
-  :package-version '(Org . "9.5")
+  :package-version '(Org . "9.8")
   :type '(repeat :value ("k" . ignore)
 		 (choice :value ("k" . ignore)
 			 (list :tag "Descriptive Headline" (string :tag "Headline"))
@@ -791,7 +797,8 @@ command."
 			       (string :tag "Command letter")
 			       (choice
 				(function)
-				(sexp))))))
+				(sexp)))))
+  :safe nil)
 
 (defun org--print-speed-command (speed-command)
   "Print information about SPEED-COMMAND in help buffer.

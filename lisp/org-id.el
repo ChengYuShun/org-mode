@@ -1,6 +1,6 @@
 ;;; org-id.el --- Global identifiers for Org entries -*- lexical-binding: t; -*-
 ;;
-;; Copyright (C) 2008-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2008-2026 Free Software Foundation, Inc.
 ;;
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -300,7 +300,8 @@ This variable is only relevant when `org-id-track-globally' is set."
 This variable has the same form as `org-refile-targets', which see."
   :group 'org-id
   :type (get 'org-refile-targets 'custom-type)
-  :package-version '(Org . "9.8"))
+  :package-version '(Org . "9.8")
+  :safe t)
 
 ;;; The API functions
 

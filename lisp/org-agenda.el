@@ -1,6 +1,6 @@
 ;;; org-agenda.el --- Dynamic task and appointment lists for Org  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -1748,7 +1748,8 @@ An alist with one entry per agenda type.  The keys of the
 sublists are `agenda', `todo', `search' and `tags'.  The values
 are format strings.
 
-This format works similar to a printf format, with the following meaning:
+This format works similar to a `format' string, with the following
+meaning:
 
   %c   the category of the item, \"Diary\" for entries from the diary,
        or as given by the CATEGORY keyword or derived from the file name
@@ -1759,12 +1760,20 @@ This format works similar to a printf format, with the following meaning:
   %t   the HH:MM time-of-day specification if one applies to the entry
   %s   Scheduling/Deadline information, a short string
   %b   show breadcrumbs, i.e., the names of the higher levels
-  %(expression) Eval EXPRESSION and replace the control string
-                by the result
+  %(expression) Eval `(EXPRESSION)' and replace the control string by
+                the result.
 
-All specifiers work basically like the standard `%s' of printf, but may
-contain two additional characters: a question mark just after the `%'
-and a whitespace/punctuation character just before the final letter.
+
+`(EXPRESSION)' is evaluated with point and buffer associated with
+agenda entry/line being rendered.  For example, heading lines will be
+evaluated with point in the Org buffer at that corresponding heading.
+However, diary records will not be evaluated in an Org buffer, but
+inside diary buffer.  Auxiliary agenda lines like time grids will be
+evaluated with the point inside agenda buffer itself.
+
+All specifiers work basically like the standard `%s' of `format', but
+may contain two additional characters: a question mark just after the
+`%' and a whitespace/punctuation character just before the final letter.
 
 If the first character after `%' is a question mark, the entire field
 will only be included if the corresponding value applies to the current
@@ -2016,23 +2025,24 @@ When t, the highest priority entries are bold, lowest priority italic.
 However, settings in `org-priority-faces' will overrule these faces.
 When this variable is the symbol `cookies', only fontify the
 cookies, not the entire task.
-This may also be an association list of priority faces, whose
-keys are the character values of `org-priority-highest',
-`org-priority-default', and `org-priority-lowest' (the default values
-are ?A, ?B, and ?C, respectively).  The face may be a named face, a
-color as a string, or a list like `(:background \"Red\")'.
-If it is a color, the variable `org-faces-easy-properties'
-determines if it is a foreground or a background color."
+
+This may also be an association list of priority faces, whose keys are
+priorities and values are faces.  The face may be a named face, a color
+as a string, or a list like `(:background \"Red\")'.  If it is a color,
+the variable `org-faces-easy-properties' determines if it is a
+foreground or a background color."
   :group 'org-agenda-line-format
   :type '(choice
 	  (const :tag "Never" nil)
 	  (const :tag "Defaults" t)
 	  (const :tag "Cookies only" cookies)
-	  (repeat :tag "Specify"
-		  (list (character :tag "Priority" :value ?A)
-			(choice    :tag "Face    "
-				   (string :tag "Color")
-				   (sexp :tag "Face"))))))
+          (alist :tag "Association list"
+                 :key-type (choice :tag "Priority"
+                                   (character :tag "Character" :value ?A)
+                                   (natnum :tag "Number" :value 1))
+                 :value-type (choice :tag "Face    "
+			             (string :tag "Color")
+			             (sexp :tag "Face")))))
 
 (defcustom org-agenda-day-face-function nil
   "Function called to determine what face should be used to display a day.
@@ -4120,7 +4130,7 @@ agenda display, configure `org-agenda-finalize-hook'."
 		    org-priority-highest)
 	      l (or (get-char-property (point) 'org-priority-lowest)
 		    org-priority-lowest)
-	      p (string-to-char (match-string 2))
+	      p (org-priority-to-value (match-string 2))
 	      b (match-beginning 1)
 	      e (if (eq org-agenda-fontify-priorities 'cookies)
 		    (1+ (match-end 2))

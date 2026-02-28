@@ -1,6 +1,6 @@
 ;;; ob-ref.el --- Babel Functions for Referencing External Data -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Authors: Eric Schulte
 ;;	 Dan Davison
@@ -236,7 +236,7 @@ to \"0:-1\"."
 	  (if (or (= 0 (length portion)) (string-match ind-re portion))
 	      (mapcar
 	       (lambda (n) (nth n lis))
-	       (apply 'org-number-sequence
+	       (apply #'number-sequence
 		      (if (and (> (length portion) 0) (match-string 2 portion))
 			  (list
 			   (funcall wrap (string-to-number (match-string 2 portion)))

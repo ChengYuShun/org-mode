@@ -1,6 +1,6 @@
 ;;; org-cycle.el --- Visibility cycling of Org entries -*- lexical-binding: t; -*-
 ;;
-;; Copyright (C) 2020-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2020-2026 Free Software Foundation, Inc.
 ;;
 ;; Maintainer: Ihor Radchenko <yantar92 at posteo dot net>
 ;; Keywords: folding, visibility cycling, invisible text
@@ -245,7 +245,8 @@ normal outline commands like `show-all', but not with the cycling commands."
   :group 'org-startup
   :group 'org-cycle
   :package-version '(Org . "9.8")
-  :type 'boolean)
+  :type 'boolean
+  :safe t)
 
 (defvaralias 'org-tab-first-hook 'org-cycle-tab-first-hook)
 (defvar org-cycle-tab-first-hook nil

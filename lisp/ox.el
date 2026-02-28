@@ -1,6 +1,6 @@
 ;;; ox.el --- Export Framework for Org Mode          -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2012-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2026 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;; Maintainer: Ihor Radchenko <yantar92 at posteo dot net>
@@ -827,6 +827,7 @@ exported.
 This option can also be set with the OPTIONS keyword, e.g.
 \"<:nil\"."
   :group 'org-export-general
+  :package-version '(Org . "9.8")
   :type '(choice
 	  (const :tag "All timestamps" t)
 	  (const :tag "Active timestamps, including diary timestamps" active)
@@ -885,7 +886,8 @@ This variable does not affect {{{results}}} macros when processing
 code block results."
   :group 'org-export-general
   :package-version '(Org . "9.8")
-  :type 'boolean)
+  :type 'boolean
+  :safe (lambda (obj) (null obj)))
 
 (defcustom org-export-snippet-translation-alist nil
   "Alist between export snippets backends and exporter backends.
@@ -4721,7 +4723,6 @@ Return value can be an object or an element:
         (org-persist-register location-type path
                               :write-immediately t))))
 
-(require 'subr-x) ;; FIXME: For `thread-first' in Emacs 26.
 (defun org-export-link-localise (link)
   "Convert remote LINK to local link.
 If LINK refers to a remote resource, modify it to point to a local
@@ -6491,7 +6492,7 @@ them."
      ("it" :default "Riferimenti")
      ("nl" :default "Bronverwijzingen")
      ("nn" :default "Kjelder")
-     ("pl" :default "Odwołania") ; could be "Referencje" but I think its too englishy
+     ("pl" :default "Odwołania") ; could be "Referencje" but I think it's too Englishy
      ("pt_BR" :html "Refer&ecirc;ncias" :default "Referências" :ascii "Referencias")
      ("ro" :default "Bibliografie")
      ("sl" :default "Reference")

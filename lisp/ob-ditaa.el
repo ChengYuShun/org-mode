@@ -1,6 +1,6 @@
 ;;; ob-ditaa.el --- Babel Functions for ditaa        -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2026 Free Software Foundation, Inc.
 
 ;; Authors: Eric Schulte, Jarmo Hurri
 ;; Keywords: literate programming, reproducible research
@@ -97,19 +97,22 @@ The executable can be configured via `org-ditaa-exec'."
   :group 'org-babel
   :package-version '(Org . "9.8")
   :type '(choice (const :tag "Use java together with a JAR file." jar)
-                 (const :tag "Use ditaa executable." ditaa)))
+                 (const :tag "Use ditaa executable." ditaa))
+  :safe t)
 
 (defcustom org-ditaa-exec "ditaa"
   "File name of the ditaa executable."
   :group 'org-babel
   :package-version '(Org . "9.8")
-  :type 'string)
+  :type 'string
+  :safe nil)
 
 (define-obsolete-variable-alias 'org-babel-ditaa-java-cmd 'org-ditaa-java-exec "9.8")
 (defcustom org-ditaa-java-exec "java"
   "Java executable to use when evaluating ditaa blocks using a JAR."
   :group 'org-babel
-  :type 'string)
+  :type 'string
+  :safe nil)
 
 (defcustom org-ditaa-jar-path (expand-file-name
 			       "ditaa.jar"

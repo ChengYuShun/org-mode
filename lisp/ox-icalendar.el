@@ -1,6 +1,6 @@
 ;;; ox-icalendar.el --- iCalendar Backend for Org Export Engine -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2004-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2026 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;;      Nicolas Goaziou <mail@nicolasgoaziou.fr>
@@ -212,6 +212,7 @@ timestamps isolated in a paragraph containing only timestamps.
 
 It can also be set with the #+OPTIONS line, e.g. \"<:t\"."
   :group 'org-export-icalendar
+  :package-version '(Org . "9.8")
   :type '(choice
 	  (const :tag "All timestamps" t)
 	  (const :tag "Active timestamps, including diary timestamps" active)

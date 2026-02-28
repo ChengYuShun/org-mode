@@ -1,6 +1,6 @@
 ;;; ox-md.el --- Markdown Backend for Org Export Engine -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2012-2025 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2026 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <n.goaziou@gmail.com>
 ;; Keywords: org, text, markdown
@@ -106,7 +106,8 @@ converted to markdown.
 When nil, the links still point to the plain \".org\" file."
   :group 'org-export-md
   :package-version '(Org . "9.8")
-  :type 'boolean)
+  :type 'boolean
+  :safe t)
 
 
 
@@ -409,8 +410,8 @@ a communication channel."
 			     (concat "     " (org-make-tag-string tag-list))))))
 	   (priority
 	    (and (plist-get info :with-priority)
-		 (let ((char (org-element-property :priority headline)))
-		   (and char (format "[#%c] " char)))))
+		 (let ((priority-value (org-element-property :priority headline)))
+		   (and priority-value (format "[#%s] " (org-priority-to-string priority-value))))))
 	   ;; Headline text without tags.
 	   (heading (concat todo priority title))
 	   (style (plist-get info :md-headline-style)))
