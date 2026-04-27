@@ -1005,8 +1005,8 @@ enlarging regions.  To make this more effective, the bullet
 cycling will no longer happen anywhere in an item line, but only
 if the cursor is exactly on the bullet.
 
-If you set this variable to the symbol `always', then the keys
-will not be special in headlines, property lines, item lines, and
+If you set this variable to the symbol `except-timestamps', then the
+keys will not be special in headlines, property lines, item lines, and
 table cells, to make shift selection work there as well.  If this is
 what you want, you can use the following alternative commands:
 `\\[org-todo]' and `\\[org-priority]' \
@@ -1016,13 +1016,20 @@ can be used to switch TODO sets,
 `\\[org-ctrl-c-minus]' to cycle item bullet types,
 and properties can be edited by hand or in column view.
 
-However, when the cursor is on a timestamp, shift-cursor commands
-will still edit the time stamp - this is just too good to give up."
+However, when the cursor is on a timestamp, shift-cursor commands will
+still edit the timestamp - this is just too good to give up.  Set the
+value to symbol `everywhere' to disable shift-cursor commands on
+timestamps as well."
   :group 'org
+  :package-version '("Org" . "10.0")
   :type '(choice
 	  (const :tag "Never" nil)
 	  (const :tag "When outside special context" t)
-	  (const :tag "Everywhere except timestamps" always)))
+          ;; This used to be symbol `always', but it is confusing
+          ;; when we also have `everywhere', so renamed, keeping
+          ;; old symbol support in the code for backwards compatibility.
+	  (const :tag "Everywhere except timestamps" except-timestamps)
+          (const :tag "Everywhere" everywhere)))
 
 (defcustom org-loop-over-headlines-in-active-region t
   "Shall some commands act upon headlines in the active region?
@@ -1077,7 +1084,7 @@ This variable can be nil, t, or an a list of entries like
                    (const :tag "Deactivate region" nil))))
   :package-version '(Org . "9.8")
   :group 'org-edit-structure
-  :safe t)
+  :safe #'always)
 
 (defun org--deactivate-mark ()
   "Return non-nil when `this-command' should deactivate mark upon completion.
@@ -2500,7 +2507,7 @@ highest priority, it is smaller than the lowest \"C\" priority:
   :package-version '(Org . "9.8")
   :type '( restricted-sexp :tag "Number 0-64 or uppercase character A-Z"
            :match-alternatives ((lambda (val) (org-priority-valid-value-p val t))))
-  :safe t)
+  :safe #'integerp)
 
 (defvaralias 'org-lowest-priority 'org-priority-lowest)
 (defcustom org-priority-lowest ?C
@@ -2523,7 +2530,7 @@ priority, it is greater than the highest \"A\" priority: 67 >
   :package-version '(Org . "9.8")
   :type '( restricted-sexp :tag "Number 0-64 or uppercase character A-Z"
            :match-alternatives ((lambda (val) (org-priority-valid-value-p val t))))
-  :safe t)
+  :safe #'integerp)
 
 (defvaralias 'org-default-priority 'org-priority-default)
 (defcustom org-priority-default ?B
@@ -2540,7 +2547,7 @@ first step refuses to set the default and the second will fall back on
   :package-version '(Org . "9.8")
   :type '( restricted-sexp :tag "Number 0-64 or uppercase character A-Z"
            :match-alternatives ((lambda (val) (org-priority-valid-value-p val t))))
-  :safe t)
+  :safe #'integerp)
 
 (defcustom org-priority-start-cycle-with-default t
   "Non-nil means start with default priority when starting to cycle.
@@ -2633,7 +2640,7 @@ will be preserved on export."
   :group 'org-time
   :package-version '(Org . "9.8")
   :type '(cons string string)
-  :safe t)
+  :safe #'consp)
 
 (defun org-time-stamp-format (&optional with-time inactive custom)
   "Get timestamp format for a time string.
@@ -3084,7 +3091,7 @@ For an example of a function that uses this advanced sorting system, see
           (const :tag "Sort by hierarchy" org-tags-sort-hierarchy)
           (function :tag "Custom function" nil)
           (repeat function))
-  :safe nil)
+  :risky t)
 
 (defvar org-tags-history nil
   "History of minibuffer reads for tags.")
@@ -3570,7 +3577,7 @@ Place-holders used due to `org-create-formula-image':
   :package-version '(Org . "9.8")
   :type '(alist :tag "LaTeX to image backends"
 		:value-type (plist))
-  :safe nil)
+  :risky t)
 
 (defcustom org-preview-latex-image-directory "ltximg/"
   "Path to store latex preview images.
@@ -3590,7 +3597,7 @@ in the same place."
   :group 'org-latex
   :package-version '(Org . "9.8")
   :type 'string
-  :safe nil)
+  :risky t)
 
 (defun org-format-latex-mathml-available-p ()
   "Return t if `org-latex-to-mathml-convert-command' is usable."
@@ -3713,6 +3720,7 @@ A string will be inserted as-is in the header of the document."
   :group 'org-export-latex
   :set 'org-set-packages-alist
   :get 'org-get-packages-alist
+  :safe #'listp
   :package-version '(Org . "9.7")
   :type '(repeat
 	  (choice
@@ -3754,6 +3762,7 @@ Make sure that you only list packages here which:
     `org-latex-default-packages-alist'."
   :group 'org-latex
   :group 'org-export-latex
+  :safe #'listp
   :set 'org-set-packages-alist
   :get 'org-get-packages-alist
   :type
@@ -5401,7 +5410,7 @@ the rounding returns a past time."
       (let* ((time (decode-time now))
 	     (res (org-encode-time
                    (apply #'list
-                          0 (* r (round (nth 1 time) r))
+                          0 (* r (round (decoded-time-minute time) r))
                           (nthcdr 2 time)))))
 	(if (or (not past) (time-less-p res now))
 	    res
@@ -5528,7 +5537,7 @@ CHAR should be the marker character.  If it is a space, it means to
 remove the emphasis of the selected region.
 If CHAR is not given (for example in an interactive call) it will be
 prompted for."
-  (interactive)
+  (interactive nil org-mode)
   (let ((erc org-emphasis-regexp-components)
 	(string "") beg end move s)
     (if (org-region-active-p)
@@ -6237,7 +6246,7 @@ needs to be inserted at a specific position in the font-lock sequence.")
 
 (defun org-toggle-pretty-entities ()
   "Toggle the composition display of entities as UTF8 characters."
-  (interactive)
+  (interactive nil org-mode)
   (setq-local org-pretty-entities (not org-pretty-entities))
   (org-restart-font-lock)
   (if org-pretty-entities
@@ -6254,7 +6263,7 @@ needs to be inserted at a specific position in the font-lock sequence.")
 
 (defun org-toggle-custom-properties-visibility ()
   "Display or hide properties in `org-custom-properties'."
-  (interactive)
+  (interactive nil org-mode)
   (if org-custom-properties-overlays
       (progn (mapc #'delete-overlay org-custom-properties-overlays)
 	     (setq org-custom-properties-overlays nil))
@@ -6535,7 +6544,7 @@ so that you can work with several indirect buffers at the same time.  If
 `\\[universal-argument]' prefix also
 requests that a new frame be made for the new buffer, so that the dedicated
 frame is not changed."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((cbuf (current-buffer))
 	(cwin (selected-window))
 	(pos (point))
@@ -6669,7 +6678,7 @@ command.
 When optional argument LEVEL is a number, insert a heading at
 that level.  For backwards compatibility, when LEVEL is non-nil
 but not a number, insert a level-1 heading."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((blank? (org--blank-before-heading-p (equal arg '(16))))
          (current-level (org-current-level))
          (num-stars (or
@@ -6809,7 +6818,7 @@ Return nil before first heading."
         ;; When using `org-fold-core--optimize-for-huge-buffers',
         ;; returned text will be invisible.  Clear it up.
         (save-match-data
-          (org-fold-core-remove-optimisation (match-beginning 0) (match-end 0)))
+          (org-fold-core-remove-optimization (match-beginning 0) (match-end 0)))
         (let ((todo (and (not no-todo) (match-string 2)))
 	      (priority (and (not no-priority) (match-string 3)))
 	      (headline (pcase (match-string 4)
@@ -6839,7 +6848,7 @@ This is a list with the following elements:
   (save-excursion
     (org-back-to-heading t)
     (when (let (case-fold-search) (looking-at org-complex-heading-regexp))
-      (org-fold-core-remove-optimisation (match-beginning 0) (match-end 0))
+      (org-fold-core-remove-optimization (match-beginning 0) (match-end 0))
       (prog1
           (list (length (match-string 1))
 	        (org-reduced-level (length (match-string 1)))
@@ -6858,7 +6867,7 @@ This is a list with the following elements:
 (defun org-edit-headline (&optional heading)
   "Edit the current headline.
 Set it to HEADING when provided."
-  (interactive)
+  (interactive nil org-mode)
   (org-with-wide-buffer
    (org-back-to-heading t)
    (let ((case-fold-search nil))
@@ -6875,7 +6884,7 @@ Set it to HEADING when provided."
 
 (defun org-insert-heading-after-current ()
   "Insert a new heading with same level as current, after current subtree."
-  (interactive)
+  (interactive nil org-mode)
   (org-back-to-heading)
   (org-insert-heading)
   (org-move-subtree-down)
@@ -6883,14 +6892,14 @@ Set it to HEADING when provided."
 
 (defun org-insert-heading-respect-content (&optional invisible-ok)
   "Insert heading with `org-insert-heading-respect-content' set to t."
-  (interactive)
+  (interactive nil org-mode)
   (org-insert-heading '(4) invisible-ok))
 
 (defun org-insert-todo-heading-respect-content (&optional arg)
   "Call `org-insert-todo-heading', inserting after current subtree.
 ARG is passed to `org-insert-todo-heading'.
 This command temporarily sets `org-insert-heading-respect-content' to t."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((org-insert-heading-respect-content t))
     (org-insert-todo-heading arg t)))
 
@@ -6905,7 +6914,7 @@ parent subtree.
 
 When called at a plain list item, insert a new item with an
 unchecked check box."
-  (interactive "P")
+  (interactive "P" org-mode)
   (when (or force-heading (not (org-insert-item 'checkbox)))
     (org-insert-heading (or (and (equal arg '(16)) '(16))
 			    force-heading))
@@ -6937,7 +6946,7 @@ Works for outline headings and for plain lists alike.
 The prefix argument ARG is passed to `org-insert-heading'.
 Unlike `org-insert-heading', when point is at the beginning of a
 heading, still insert the new sub-heading below."
-  (interactive "P")
+  (interactive "P" org-mode)
   (when (and (bolp) (not (eobp)) (not (eolp))) (forward-char))
   (org-insert-heading arg)
   (cond
@@ -6948,7 +6957,7 @@ heading, still insert the new sub-heading below."
   "Insert a new subheading with TODO keyword or checkbox and demote it.
 Works for outline headings and for plain lists alike.
 The prefix argument ARG is passed to `org-insert-todo-heading'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-insert-todo-heading arg)
   (cond
    ((org-at-heading-p) (org-do-demote))
@@ -6969,7 +6978,7 @@ When a subtree is being promoted, the hook will be called for each node.")
 (defun org-promote-subtree ()
   "Promote the entire subtree.
 See also `org-promote'."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (org-back-to-heading t)
     (org-combine-change-calls (point) (save-excursion (org-end-of-subtree t))
@@ -6979,7 +6988,7 @@ See also `org-promote'."
 (defun org-demote-subtree ()
   "Demote the entire subtree.
 See `org-demote' and `org-promote'."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (org-back-to-heading t)
     (org-combine-change-calls (point) (save-excursion (org-end-of-subtree t))
@@ -6990,7 +6999,7 @@ See `org-demote' and `org-promote'."
   "Promote the current heading higher up the tree.
 If the region is active in `transient-mark-mode', promote all
 headings in the region."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (if (org-region-active-p)
         (progn
@@ -7003,7 +7012,7 @@ headings in the region."
   "Demote the current heading lower down the tree.
 If the region is active in `transient-mark-mode', demote all
 headings in the region."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (if (org-region-active-p)
         (progn
@@ -7106,7 +7115,7 @@ odd number.  Returns values greater than 0."
   "Cycle the level of an empty headline through possible states.
 This goes first to child, then to parent, level, then up the hierarchy.
 After top level, it switches back to sibling level."
-  (interactive)
+  (interactive nil org-mode)
   (let ((org-adapt-indentation nil))
     (when (and (org-point-at-end-of-empty-headline)
                (not (and (featurep 'org-inlinetask)
@@ -7284,7 +7293,7 @@ Assume point is at a heading or an inlinetask beginning."
   "Convert an Org file with all levels allowed to one with odd levels.
 This will leave level 1 alone, convert level 2 to level 3, level 3 to
 level 5 etc."
-  (interactive)
+  (interactive nil org-mode)
   (when (yes-or-no-p "Are you sure you want to globally change levels to odd? ")
     (let ((outline-level 'org-outline-level)
 	  (org-odd-levels-only nil) n)
@@ -7302,7 +7311,7 @@ This promotes level 3 to level 2, level 5 to level 3 etc.  If the
 file contains a section with an even level, conversion would
 destroy the structure of the file.  An error is signaled in this
 case."
-  (interactive)
+  (interactive nil org-mode)
   (goto-char (point-min))
   ;; First check if there are no even levels
   (when (re-search-forward "^\\(\\*\\*\\)+ " nil t)
@@ -7328,7 +7337,7 @@ case."
 
 (defun org-move-subtree-up (&optional arg)
   "Move the current subtree up past ARG headlines of the same level."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-move-subtree-down (- (prefix-numeric-value arg))))
 
 (defun org-clean-visibility-after-subtree-move ()
@@ -7363,7 +7372,7 @@ case."
 
 (defun org-move-subtree-down (&optional arg)
   "Move the current subtree down past ARG headlines of the same level."
-  (interactive "p")
+  (interactive "p" org-mode)
   (setq arg (prefix-numeric-value arg))
   (org-preserve-local-variables
    (let ((movfunc (if (> arg 0) 'org-get-next-sibling
@@ -7432,7 +7441,7 @@ This is used to fold the tree back after pasting.")
   "Cut the current subtree into the clipboard.
 With prefix arg N, cut this many sequential subtrees.
 This is a short-hand for marking the subtree and then cutting it."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-copy-subtree n 'cut))
 
 (defun org-copy-subtree (&optional n cut force-store-markers nosubtrees)
@@ -7443,7 +7452,7 @@ If CUT is non-nil, actually cut the subtree.
 If FORCE-STORE-MARKERS is non-nil, store the relative locations
 of some markers in the region, even if CUT is non-nil.  This is
 useful if the caller implements cut-and-paste as copy-then-paste-then-cut."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-preserve-local-variables
    (let (beg end folded subtree-text (beg0 (point)))
      (if (called-interactively-p 'any)
@@ -7513,7 +7522,7 @@ move back over whitespace before inserting, and move point to the end of
 the inserted text when done.
 
 When REMOVE is non-nil, remove the subtree from the clipboard."
-  (interactive "P")
+  (interactive "P" org-mode)
   (setq tree (or tree (current-kill 0)))
   (unless (org-kill-is-subtree-p tree)
     (user-error
@@ -7670,7 +7679,7 @@ If yes, remember the marker and the distance to BEG."
   "Narrow buffer to the current subtree.
 Use the command `\\[widen]' to see the whole buffer again.
 With optional argument ELEMENT narrow to subtree around ELEMENT."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((heading
           (org-element-lineage
            (or element (org-element-at-point))
@@ -7693,7 +7702,7 @@ With optional argument ELEMENT narrow to subtree around ELEMENT."
 (defun org-toggle-narrow-to-subtree ()
   "Narrow to the subtree at point or widen a narrowed buffer.
 Use the command `\\[widen]' to see the whole buffer again."
-  (interactive)
+  (interactive nil org-mode)
   (if (buffer-narrowed-p)
       (progn (widen) (message "Buffer widen"))
     (org-narrow-to-subtree)
@@ -7702,7 +7711,7 @@ Use the command `\\[widen]' to see the whole buffer again."
 (defun org-narrow-to-block ()
   "Narrow buffer to the current block.
 Use the command `\\[widen]' to see the whole buffer again."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((case-fold-search t)
          (element (org-element-at-point)))
     (if (string-match-p "block" (symbol-name (org-element-type element)))
@@ -7744,7 +7753,7 @@ As described above, N+1 clones are produced when the original
 subtree has a repeater.  Setting N to 0, then, can be used to
 remove the repeater from a subtree and create a shifted clone
 with the original repeater."
-  (interactive "nNumber of clones to produce: ")
+  (interactive "nNumber of clones to produce: " org-mode)
   (unless (wholenump n) (user-error "Invalid number of replications %s" n))
   (when (org-before-first-heading-p) (user-error "No subtree to clone"))
   (let* ((beg (save-excursion (org-back-to-heading t) (point)))
@@ -7942,7 +7951,7 @@ If CURRENT is non-nil, append the current heading to the output.
 SEPARATOR is passed through to `org-format-outline-path'.  It separates
 the different parts of the path and defaults to \"/\".
 If JUST-RETURN-STRING is non-nil, return a string, don't display a message."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* (case-fold-search
 	 (bfn (buffer-file-name (buffer-base-buffer)))
          (title-prop (when (eq file-or-title 'title) (org-get-title)))
@@ -7974,7 +7983,7 @@ If JUST-RETURN-STRING is non-nil, return a string, don't display a message."
 (defun org-sort (&optional with-case)
   "Call `org-sort-entries', `org-table-sort-lines' or `org-sort-list'.
 Optional argument WITH-CASE means sort case-sensitively."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-call-with-arg
    (cond ((org-at-table-p) #'org-table-sort-lines)
 	 ((org-at-item-p) #'org-sort-list)
@@ -8066,7 +8075,7 @@ When sorting is done, call `org-after-sorting-entries-or-items-hook'.
 
 A non-nil value for INTERACTIVE? is used to signal that this
 function is being called interactively."
-  (interactive (list current-prefix-arg nil nil nil nil t))
+  (interactive (list current-prefix-arg nil nil nil nil t) org-mode)
   (let ((case-func (if with-case 'identity 'downcase))
         start beg end stars re re2
         txt what tmp)
@@ -8506,14 +8515,14 @@ the whole buffer."
 
 (defun org-find-file-at-mouse (ev)
   "Open file link or URL at mouse."
-  (interactive "e")
+  (interactive "e" org-mode)
   (mouse-set-point ev)
   (org-open-at-point 'in-emacs))
 
 (defun org-open-at-mouse (ev)
   "Open file link or URL at mouse.
 See the docstring of `org-open-file' for details."
-  (interactive "e")
+  (interactive "e" org-mode)
   (mouse-set-point ev)
   (when (eq major-mode 'org-agenda-mode)
     (org-agenda-copy-local-variable 'org-link-abbrev-alist-local))
@@ -8866,7 +8875,7 @@ On top of syntactically correct links, this function also tries
 to open links and timestamps in comments, node properties, and
 keywords if point is on something looking like a timestamp or
 a link."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-load-modules-maybe)
   (setq org-window-config-before-follow-link (current-window-configuration))
   (org-remove-occur-highlights nil nil t)
@@ -9282,7 +9291,8 @@ defined types, per `org-dynamic-block-define'.  If INTERACTIVE-P
 is non-nil, call the dynamic block function interactively."
   (interactive (list (completing-read "Dynamic block: "
 				      (org-dynamic-block-types))
-		     t))
+		     t)
+               org-mode)
   (pcase (org-dynamic-block-function type)
     (`nil (error "No such dynamic block: %S" type))
     ((and f (pred functionp))
@@ -9293,7 +9303,7 @@ is non-nil, call the dynamic block function interactively."
   "User command for updating dynamic blocks.
 Update the dynamic block at point.  With prefix ARG, update all dynamic
 blocks in the buffer."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if arg
       (org-update-all-dblocks)
     (or (looking-at org-dblock-start-re)
@@ -9304,7 +9314,7 @@ blocks in the buffer."
   "Update the dynamic block at point.
 This means to empty the block, parse for parameters and then call
 the correct writing function."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (let* ((win (selected-window))
 	   (pos (point))
@@ -9350,7 +9360,7 @@ Error if there is no such block at point."
 (defun org-update-all-dblocks ()
   "Update all dynamic blocks in the buffer.
 This function can be used in a hook."
-  (interactive)
+  (interactive nil org-mode)
   (when (derived-mode-p 'org-mode)
     (org-map-dblocks 'org-update-dblock)))
 
@@ -9583,7 +9593,7 @@ When foo is written as FOO, upcase the #+BEGIN/END as well."
 
 (defun org-toggle-comment ()
   "Change the COMMENT state of an entry."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (org-back-to-heading)
     (let ((case-fold-search nil))
@@ -9624,18 +9634,18 @@ nil or a string to be used for the todo mark." )
 	  (cond
 	   (org-use-last-clock-out-time-as-effective-time
 	    (or (org-clock-get-last-clock-out-time) ct))
-	   ((and org-use-effective-time (< (nth 2 dct) org-extend-today-until))
-	    (org-encode-time 0 59 23 (1- (nth 3 dct)) (nth 4 dct) (nth 5 dct)))
+	   ((and org-use-effective-time (< (decoded-time-hour dct) org-extend-today-until))
+	    (org-encode-time 0 59 23 (1- (decoded-time-day dct)) (decoded-time-month dct) (decoded-time-year dct)))
 	   (t ct))))
     ct1))
 
 (defun org-todo-yesterday (&optional arg)
   "Like `org-todo' but the time of change will be 23:59 of yesterday."
-  (interactive "P")
+  (interactive "P" org-mode org-agenda-mode)
   (if (eq major-mode 'org-agenda-mode)
       (org-agenda-todo-yesterday arg)
     (let* ((org-use-effective-time t)
-	   (hour (nth 2 (decode-time (org-current-time))))
+	   (hour (decoded-time-hour (decode-time (org-current-time))))
 	   (org-extend-today-until (1+ hour)))
       (org-todo arg))))
 
@@ -9645,7 +9655,7 @@ nil or a string to be used for the todo mark." )
 (defalias 'org-cancel-repeater #'org-cancel-repeaters)
 (defun org-cancel-repeaters ()
   "Cancel all the repeaters in entry by setting their numeric value to zero."
-  (interactive)
+  (interactive nil org-mode)
   (save-excursion
     (org-back-to-heading t)
     (let ((bound1 (point))
@@ -9701,7 +9711,7 @@ When called through Elisp, arg is also interpreted in the following way:
 `previousset' -> switch to the previous set of keywords
 \"WAITING\"     -> switch to the specified keyword, but only if it
                  really is a member of `org-todo-keywords'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (and (org-region-active-p) org-loop-over-headlines-in-active-region)
       (let ((cl (if (eq org-loop-over-headlines-in-active-region 'start-level)
 		    'region-start-level 'region))
@@ -10014,7 +10024,7 @@ string to select a different tag for this task."
   "Toggle the ORDERED property of the current entry.
 For better visibility, you can track the value of this property with a tag.
 See variable `org-track-ordered-property-with-tag'."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((t1 org-track-ordered-property-with-tag)
 	 (tag (and t1 (if (stringp t1) t1 "ORDERED"))))
     (save-excursion
@@ -10078,7 +10088,7 @@ This should be called with the cursor in a line with a statistics
 cookie.  When called with a \\[universal-argument] prefix, update all
 statistics cookies in the accessible portion of the buffer, i.e.,
 respect narrowing."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if all
       (progn
 	(org-update-checkbox-count
@@ -10609,7 +10619,7 @@ headlines above the match.
 With a `\\[universal-argument]' prefix, prompt for a regexp to match.
 With a numeric prefix N, construct a sparse tree for the Nth element
 of `org-todo-keywords-1'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((case-fold-search nil)
 	(kwd-re
 	 (cond ((null arg) (concat org-not-done-regexp "\\s-"))
@@ -10722,7 +10732,7 @@ With one universal prefix argument, remove any deadline from the item.
 With two universal prefix arguments, prompt for a warning delay.
 With argument TIME, set the deadline at the corresponding date.  TIME
 can either be an Org date like \"2011-07-24\" or a delta like \"+2d\"."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (and (org-region-active-p) org-loop-over-headlines-in-active-region)
       (org-map-entries
        (lambda () (org--deadline-or-schedule arg 'deadline time))
@@ -10743,7 +10753,7 @@ With one universal prefix argument, remove any scheduling date from the item.
 With two universal prefix arguments, prompt for a delay cookie.
 With argument TIME, scheduled at the corresponding date.  TIME can
 either be an Org date like \"2011-07-24\" or a delta like \"+2d\"."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (and (org-region-active-p) org-loop-over-headlines-in-active-region)
       (org-map-entries
        (lambda () (org--deadline-or-schedule arg 'scheduled time))
@@ -10935,7 +10945,7 @@ The auto-repeater uses this.")
 (defun org-add-note ()
   "Add a note to the current entry.
 This is done in the same way as adding a state change note."
-  (interactive)
+  (interactive nil org-mode)
   (org-add-log-setup 'note))
 
 (defun org-log-beginning (&optional create)
@@ -11228,7 +11238,7 @@ b      Show deadlines and scheduled items before a date.
 a      Show deadlines and scheduled items after a date.
 d      Show deadlines due within `org-deadline-warning-days'.
 D      Show deadlines and scheduled items between a date range."
-  (interactive "P")
+  (interactive "P" org-mode)
   (setq type (or type org-sparse-tree-default-date-type))
   (setq org-ts-type type)
   (message "Sparse tree: [r]egexp [t]odo [T]odo-kwd [m]atch [p]roperty
@@ -11298,7 +11308,7 @@ Optional argument CALLBACK can be a function of no argument.  In this case,
 it is called with point at the end of the match, match data being set
 accordingly.  Current match is shown only if the return value is non-nil.
 The function must neither move point nor alter narrowing."
-  (interactive "sRegexp: \nP")
+  (interactive "sRegexp: \nP" org-mode)
   (when (equal regexp "")
     (user-error "Regexp cannot be empty"))
   (unless keep-previous
@@ -11370,7 +11380,7 @@ match is found."
   "Remove the occur highlights from the buffer.
 BEG and END are ignored.  If NOREMOVE is nil, remove this function
 from the `before-change-functions' in the current buffer."
-  (interactive)
+  (interactive nil org-mode)
   (unless org-inhibit-highlight-removal
     (mapc #'delete-overlay org-occur-highlights)
     (setq org-occur-highlights nil)
@@ -11422,12 +11432,12 @@ non-nil."
 
 (defun org-priority-up ()
   "Increase the priority of the current item."
-  (interactive)
+  (interactive nil org-mode)
   (org-priority 'up))
 
 (defun org-priority-down ()
   "Decrease the priority of the current item."
-  (interactive)
+  (interactive nil org-mode)
   (org-priority 'down))
 
 (defun org-priority (&optional action)
@@ -11440,7 +11450,7 @@ When called programmatically, ACTION can be `set', `up', `down', `remove', an
 uppercase alphabetic character A through Z, or an integer 0 through 64,
 inclusive.  If a lower-case character is passed as ACTION or entered via
 interactive prompt, it will automatically be converted to uppercase."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (equal action '(4))
       (org-priority-show)
     (unless org-priority-enable-commands
@@ -11563,7 +11573,7 @@ interactive prompt, it will automatically be converted to uppercase."
 (defun org-priority-show ()
   "Show the priority of the current item as number.
 Return the priority value."
-  (interactive)
+  (interactive nil org-mode org-agenda-mode)
   (let ((pri (if (eq major-mode 'org-agenda-mode)
 		 (org-get-at-bol 'priority)
 	       (save-excursion
@@ -11793,7 +11803,7 @@ those.  See the manual for details.
 
 If optional argument TODO-ONLY is non-nil, only select lines that
 are also TODO tasks."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-agenda-prepare-buffers (list (current-buffer)))
   (let ((org--matcher-tags-todo-only todo-only))
     (org-scan-tags 'sparse-tree (cdr (org-make-tags-matcher match t))
@@ -12224,7 +12234,7 @@ setting of `org-loop-over-headlines-in-active-region'.
 
 This function is for interactive use only;
 in Lisp code use `org-set-tags' instead."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((org-use-fast-tag-selection
 	 (unless (equal '(16) arg) org-use-fast-tag-selection)))
     (cond
@@ -12371,7 +12381,8 @@ This works in the agenda, and also in an Org buffer."
 	    'org-tags-history))
 	 (progn
 	   (message "[s]et or [r]emove? ")
-	   (equal (read-char-exclusive) ?r))))
+	   (equal (read-char-exclusive) ?r)))
+   org-mode org-agenda-mode)
   (deactivate-mark)
   (let ((agendap (equal major-mode 'org-agenda-mode))
 	l1 l2 m buf pos newhead (cnt 0))
@@ -13103,7 +13114,7 @@ See `org-property-re' for match data, if applicable."
 
 (defun org-property-action ()
   "Do an action on properties."
-  (interactive)
+  (interactive nil org-mode)
   (message "Property Action:  [s]et  [d]elete  [D]elete globally  [c]ompute")
   (let ((c (read-char-exclusive)))
     (cl-case c
@@ -13115,7 +13126,7 @@ See `org-property-re' for match data, if applicable."
 
 (defun org-inc-effort ()
   "Increment the value of the effort property in the current entry."
-  (interactive)
+  (interactive nil org-mode)
   (org-set-effort t))
 
 (defvar org-clock-effort)       ; Defined in org-clock.el.
@@ -13126,7 +13137,7 @@ If INCREMENT is non-nil, set the property to the next allowed
 value.  Otherwise, if optional argument VALUE is provided, use
 it.  Eventually, prompt for the new value if none of the previous
 variables is set."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((allowed (org-property-get-allowed-values nil org-effort-property t))
 	 (current (org-entry-get nil org-effort-property))
 	 (value
@@ -13771,7 +13782,7 @@ If a region is active, insert the drawer around that region
 instead.
 
 Point is left between drawer's boundaries."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((drawer (if arg "PROPERTIES"
 		   (or drawer (read-from-minibuffer "Drawer: ")))))
     (cond
@@ -13898,7 +13909,7 @@ Optional argument DEFAULT provides a default value for PROPERTY."
   "Allow setting [PROPERTY]: [value] direction from prompt.
 When use-default, don't even ask, just use the last
 \"[PROPERTY]: [value]\" string from the history."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((completion-ignore-case t)
 	 (pv (or (and use-last org-last-set-property-value)
 		 (org-completing-read
@@ -13921,7 +13932,7 @@ xxx_ALL property) or on existing values in other instances of this property
 in the current file.
 
 Throw an error when trying to set a property with an invalid name."
-  (interactive (list nil nil))
+  (interactive (list nil nil) org-mode)
   (let ((property (or property (org-read-property-name))))
     ;; `org-entry-put' also makes the following check, but this one
     ;; avoids polluting `org-last-set-property' and
@@ -13969,7 +13980,8 @@ part of the buffer."
 	  (prop (if (< 1 (length props))
 		    (completing-read "Property: " props nil t)
 		  (caar props))))
-     (list prop)))
+     (list prop))
+   org-mode)
   (if (not property)
       (message "No property to delete in this entry")
     (org-entry-delete nil property)
@@ -13983,7 +13995,8 @@ This function ignores narrowing, if any."
 	  (prop (completing-read
 		 "Globally remove property: "
 		 (mapcar #'list (org-buffer-property-keys)))))
-     (list prop)))
+     (list prop))
+   org-mode)
   (org-with-wide-buffer
    (goto-char (point-min))
    (let ((count 0)
@@ -13998,7 +14011,7 @@ This function ignores narrowing, if any."
   "Compute the property at point.
 This looks for an enclosing column format, extracts the operator and
 then applies it to the property in the column format's scope."
-  (interactive)
+  (interactive nil org-mode)
   (unless (org-at-property-p)
     (user-error "Not at a property"))
   (let ((prop (match-string-no-properties 2)))
@@ -14052,12 +14065,12 @@ completion."
 
 (defun org-property-previous-allowed-value (&optional _previous)
   "Switch to the next allowed value for this property."
-  (interactive)
+  (interactive nil org-mode)
   (org-property-next-allowed-value t))
 
 (defun org-property-next-allowed-value (&optional previous)
   "Switch to the next allowed value for this property."
-  (interactive)
+  (interactive nil org-mode)
   (unless (org-at-property-p)
     (user-error "Not at a property"))
   (let* ((prop (car (save-match-data (org-split-string (match-string 1) ":"))))
@@ -14164,7 +14177,7 @@ When the target headline is found, return a marker to this location."
 IDENT can be a string, a symbol or a number, this function will search for
 the string representation of it.
 Return the position where this entry starts, or nil if there is no such entry."
-  (interactive "sID: ")
+  (interactive "sID: " org-mode)
   (let ((id (cond
 	     ((stringp ident) ident)
 	     ((symbolp ident) (symbol-name ident))
@@ -14197,7 +14210,7 @@ with the current time without prompting the user.
 
 When called from Lisp, the timestamp is inactive if INACTIVE is
 non-nil."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((ts (cond
 	      ((org-at-date-range-p t)
 	       (match-string (if (< (point) (- (match-beginning 2) 2)) 1 2)))
@@ -14282,7 +14295,7 @@ Otherwise, only the date is included.
 
 When called with two universal prefix arguments, insert an inactive time stamp
 with the current time without prompting the user."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-timestamp arg 'inactive))
 
 (defvar org-date-ovl (make-overlay 1 1))
@@ -14384,9 +14397,9 @@ user."
     ;; time is not given.
     (when (and (not default-time)
                (not org-overriding-default-time)
-               (< (nth 2 org-defdecode) org-extend-today-until))
-      (setf (nth 2 org-defdecode) -1)
-      (setf (nth 1 org-defdecode) 59)
+               (< (decoded-time-hour org-defdecode) org-extend-today-until))
+      (setf (decoded-time-hour org-defdecode) -1)
+      (setf (decoded-time-minute org-defdecode) 59)
       (setq org-def (org-encode-time org-defdecode))
       (setq org-defdecode (decode-time org-def)))
     (let* ((timestr (format-time-string
@@ -14472,9 +14485,11 @@ user."
       (setq final (decode-time final))
       (if (and (boundp 'org-time-was-given) org-time-was-given)
 	  (format "%04d-%02d-%02d %02d:%02d"
-		  (nth 5 final) (nth 4 final) (nth 3 final)
-		  (nth 2 final) (nth 1 final))
-	(format "%04d-%02d-%02d" (nth 5 final) (nth 4 final) (nth 3 final))))))
+		  (decoded-time-year final) (decoded-time-month final)
+                  (decoded-time-day final) (decoded-time-hour final)
+                  (decoded-time-minute final))
+	(format "%04d-%02d-%02d" (decoded-time-year final)
+                (decoded-time-month final) (decoded-time-day final))))))
 
 (defun org-read-date-display ()
   "Display the current date prompt interpretation in the minibuffer."
@@ -14634,51 +14649,51 @@ user."
 			  (substring ans (match-end 7))))))
 
     (setq tl (parse-time-string ans)
-	  day (or (nth 3 tl) (nth 3 org-defdecode))
+	  day (or (decoded-time-day tl) (decoded-time-day org-defdecode))
 	  month
-	  (cond ((nth 4 tl))
-		((not org-read-date-prefer-future) (nth 4 org-defdecode))
+	  (cond ((decoded-time-month tl))
+		((not org-read-date-prefer-future) (decoded-time-month org-defdecode))
 		;; Day was specified.  Make sure DAY+MONTH
 		;; combination happens in the future.
-		((nth 3 tl)
+		((decoded-time-day tl)
 		 (setq futurep t)
-		 (if (< day (nth 3 nowdecode)) (1+ (nth 4 nowdecode))
-		   (nth 4 nowdecode)))
-		(t (nth 4 org-defdecode)))
+		 (if (< day (decoded-time-day nowdecode)) (1+ (decoded-time-month nowdecode))
+		   (decoded-time-month nowdecode)))
+		(t (decoded-time-month org-defdecode)))
 	  year
-	  (cond ((and (not kill-year) (nth 5 tl)))
-		((not org-read-date-prefer-future) (nth 5 org-defdecode))
+	  (cond ((and (not kill-year) (decoded-time-year tl)))
+		((not org-read-date-prefer-future) (decoded-time-year org-defdecode))
 		;; Month was guessed in the future and is at least
 		;; equal to NOWDECODE's.  Fix year accordingly.
 		(futurep
-		 (if (or (> month (nth 4 nowdecode))
-			 (>= day (nth 3 nowdecode)))
-		     (nth 5 nowdecode)
-		   (1+ (nth 5 nowdecode))))
+		 (if (or (> month (decoded-time-month nowdecode))
+			 (>= day (decoded-time-day nowdecode)))
+		     (decoded-time-year nowdecode)
+		   (1+ (decoded-time-year nowdecode))))
 		;; Month was specified.  Make sure MONTH+YEAR
 		;; combination happens in the future.
-		((nth 4 tl)
+		((decoded-time-month tl)
 		 (setq futurep t)
-		 (cond ((> month (nth 4 nowdecode)) (nth 5 nowdecode))
-		       ((< month (nth 4 nowdecode)) (1+ (nth 5 nowdecode)))
-		       ((< day (nth 3 nowdecode)) (1+ (nth 5 nowdecode)))
-		       (t (nth 5 nowdecode))))
-		(t (nth 5 org-defdecode)))
-	  hour (or (nth 2 tl) (nth 2 org-defdecode))
-	  minute (or (nth 1 tl) (nth 1 org-defdecode))
-	  second (or (nth 0 tl) 0)
-	  wday (nth 6 tl))
+		 (cond ((> month (decoded-time-month nowdecode)) (decoded-time-year nowdecode))
+		       ((< month (decoded-time-month nowdecode)) (1+ (decoded-time-year nowdecode)))
+		       ((< day (decoded-time-day nowdecode)) (1+ (decoded-time-year nowdecode)))
+		       (t (decoded-time-year nowdecode))))
+		(t (decoded-time-year org-defdecode)))
+	  hour (or (decoded-time-hour tl) (decoded-time-hour org-defdecode))
+	  minute (or (decoded-time-minute tl) (decoded-time-minute org-defdecode))
+	  second (or (decoded-time-second tl) 0)
+	  wday (decoded-time-weekday tl))
 
     (when (and (eq org-read-date-prefer-future 'time)
-	       (not (nth 3 tl)) (not (nth 4 tl)) (not (nth 5 tl))
-	       (equal day (nth 3 nowdecode))
-	       (equal month (nth 4 nowdecode))
-	       (equal year (nth 5 nowdecode))
-	       (nth 2 tl)
-	       (or (< (nth 2 tl) (nth 2 nowdecode))
-		   (and (= (nth 2 tl) (nth 2 nowdecode))
-			(nth 1 tl)
-			(< (nth 1 tl) (nth 1 nowdecode)))))
+	       (not (decoded-time-day tl)) (not (decoded-time-month tl)) (not (decoded-time-year tl))
+	       (equal day (decoded-time-day nowdecode))
+	       (equal month (decoded-time-month nowdecode))
+	       (equal year (decoded-time-year nowdecode))
+	       (decoded-time-hour tl)
+	       (or (< (decoded-time-hour tl) (decoded-time-hour nowdecode))
+		   (and (= (decoded-time-hour tl) (decoded-time-hour nowdecode))
+			(decoded-time-minute tl)
+			(< (decoded-time-minute tl) (decoded-time-minute nowdecode)))))
       (setq day (1+ day)
 	    futurep t))
 
@@ -14703,14 +14718,16 @@ user."
 					;	      iso-date (calendar-gregorian-from-absolute
 					;			(calendar-iso-to-absolute
 					;			 (list iso-week day year)))))
-      (setq month (car iso-date)
-	    year (nth 2 iso-date)
-	    day (nth 1 iso-date)))
+      (setq month (calendar-extract-month iso-date)
+	    year (calendar-extract-year iso-date)
+	    day (calendar-extract-day iso-date)))
      (deltan
       (setq futurep nil)
       (unless deltadef
 	(let ((now (decode-time)))
-	  (setq day (nth 3 now) month (nth 4 now) year (nth 5 now))))
+	  (setq day (decoded-time-day now)
+                month (decoded-time-month now)
+                year (decoded-time-year now))))
       ;; FIXME: Duplicated value in ‘cond’: ""
       (cond ((member deltaw '("h" ""))
              (when (boundp 'org-time-was-given)
@@ -14720,14 +14737,14 @@ user."
             ((equal deltaw "w") (setq day (+ day (* 7 deltan))))
             ((equal deltaw "m") (setq month (+ month deltan)))
             ((equal deltaw "y") (setq year (+ year deltan)))))
-     ((and wday (not (nth 3 tl)))
+     ((and wday (not (decoded-time-day tl)))
       ;; Weekday was given, but no day, so pick that day in the week
       ;; on or after the derived date.
-      (setq wday1 (nth 6 (decode-time (org-encode-time 0 0 0 day month year))))
+      (setq wday1 (decoded-time-weekday (decode-time (org-encode-time 0 0 0 day month year))))
       (unless (equal wday wday1)
 	(setq day (+ day (% (- wday wday1 -7) 7))))))
     (when (and (boundp 'org-time-was-given)
-	       (nth 2 tl))
+	       (decoded-time-hour tl))
       (setq org-time-was-given t))
     (when (< year 100) (setq year (+ 2000 year)))
     ;; Check of the date is representable
@@ -14740,7 +14757,7 @@ user."
       (condition-case nil
 	  (ignore (org-encode-time second minute hour day month year))
 	(error
-	 (setq year (nth 5 org-defdecode))
+	 (setq year (decoded-time-year org-defdecode))
 	 (setq org-read-date-analyze-forced-year t))))
     (setq org-read-date-analyze-futurep futurep)
     (list second minute hour day month year nil -1 nil)))
@@ -14773,7 +14790,7 @@ DEF-FLAG   is t when a double ++ or -- indicates shift relative to
 	   (what (if (match-end 3) (match-string 3 s) "d"))
 	   (wday1 (cdr (assoc (downcase what) parse-time-weekdays)))
 	   (date (if rel default today))
-	   (wday (nth 6 (decode-time date)))
+	   (wday (decoded-time-weekday (decode-time date)))
 	   delta)
       (if wday1
 	  (progn
@@ -14803,7 +14820,11 @@ Unless KEEPDATE is non-nil, update `org-ans2' to the cursor date."
     (apply func args)
     (when (and (not keepdate) (calendar-cursor-to-date))
       (let* ((date (calendar-cursor-to-date))
-	     (time (org-encode-time 0 0 0 (nth 1 date) (nth 0 date) (nth 2 date))))
+	     (time (org-encode-time
+                    0 0 0
+                    (calendar-extract-day date)
+                    (calendar-extract-month date)
+                    (calendar-extract-year date))))
 	(setq org-ans2 (format-time-string "%Y-%m-%d" time))))
     (move-overlay org-date-ovl (1- (point)) (1+ (point)) (current-buffer))))
 
@@ -14885,17 +14906,28 @@ insert \".\"."
   (interactive)
   (org-funcall-in-calendar #'calendar-scroll-right nil 1))
 
+;; FIXME: Since Emacs 31, calendar.el has `calendar-total-months'.
+;; So, we are not neccesarily scrolling "three" months.
+;; Maybe rename.
 (defun org-calendar-scroll-three-months-left ()
   "Scroll the displayed calendar left by three months."
   (interactive)
   (org-funcall-in-calendar
-   #'calendar-scroll-left-three-months nil 1))
+   (if (fboundp 'calendar-scroll-calendar-left)
+       #'calendar-scroll-calendar-left
+     (with-suppressed-warnings ((obsolete calendar-scroll-left-three-months))
+       #'calendar-scroll-left-three-months))
+   nil 1))
 
 (defun org-calendar-scroll-three-months-right ()
   "Scroll the displayed calendar right by three months."
   (interactive)
   (org-funcall-in-calendar
-   #'calendar-scroll-right-three-months nil 1))
+   (if (fboundp 'calendar-scroll-calendar-right)
+       #'calendar-scroll-calendar-right
+     (with-suppressed-warnings ((obsolete calendar-scroll-right-three-months))
+       #'calendar-scroll-right-three-months))
+   nil 1))
 
 (defun org-calendar-select ()
   "Return to `org-read-date' with the date currently selected.
@@ -14903,7 +14935,11 @@ This is used by `org-read-date' in a temporary keymap for the calendar buffer."
   (interactive)
   (when (calendar-cursor-to-date)
     (let* ((date (calendar-cursor-to-date))
-	   (time (org-encode-time 0 0 0 (nth 1 date) (nth 0 date) (nth 2 date))))
+	   (time (org-encode-time
+                  0 0 0
+                  (calendar-extract-day date)
+                  (calendar-extract-month date)
+                  (calendar-extract-year date))))
       (setq org-ans1 (format-time-string "%Y-%m-%d" time)))
     (when (active-minibuffer-window) (exit-minibuffer))))
 
@@ -14938,7 +14974,7 @@ The command returns the inserted time stamp."
 (defalias 'org-toggle-time-stamp-overlays #'org-toggle-timestamp-overlays)
 (defun org-toggle-timestamp-overlays ()
   "Toggle the use of custom time stamp formats."
-  (interactive)
+  (interactive nil org-mode)
   (setq org-display-custom-times (not org-display-custom-times))
   (unless org-display-custom-times
     (let ((p (point-min)) (bmp (buffer-modified-p)))
@@ -14963,7 +14999,7 @@ The command returns the inserted time stamp."
       (when (string-match "\\(-[0-9]+:[0-9]+\\)?\\( [.+]?\\+[0-9]+[hdwmy]\\(/[0-9]+[hdwmy]\\)?\\)?\\'" ts)
 	(setq off (- (match-end 0) (match-beginning 0)))))
     (setq end (- end off))
-    (setq with-hm (and (nth 1 t1) (nth 2 t1))
+    (setq with-hm (and (decoded-time-minute t1) (decoded-time-hour t1))
 	  tf (org-time-stamp-format with-hm 'no-brackets 'custom)
 	  time (org-fix-decoded-time t1)
 	  str (org-add-props
@@ -15023,7 +15059,11 @@ This is used by `org-read-date' in a temporary keymap for the calendar buffer."
   (mouse-set-point ev)
   (when (calendar-cursor-to-date)
     (let* ((date (calendar-cursor-to-date))
-	   (time (org-encode-time 0 0 0 (nth 1 date) (nth 0 date) (nth 2 date))))
+	   (time (org-encode-time
+                  0 0 0
+                  (calendar-extract-day date)
+                  (calendar-extract-month date)
+                  (calendar-extract-year date))))
       (setq org-ans1 (format-time-string "%Y-%m-%d" time)))
     (when (active-minibuffer-window) (exit-minibuffer))))
 
@@ -15034,7 +15074,7 @@ days from today's date.  If the deadline appears in an entry marked DONE,
 it is not shown.  A numeric prefix argument NDAYS can be used to test that
 many days.  If the prefix is a raw `\\[universal-argument]', all deadlines \
 are shown."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((org-warn-days
 	  (cond
 	   ((equal ndays '(4)) 100000)
@@ -15075,7 +15115,7 @@ both scheduled and deadline timestamps."
 
 (defun org-check-before-date (d)
   "Check if there are deadlines or scheduled entries before date D."
-  (interactive (list (org-read-date)))
+  (interactive (list (org-read-date)) org-mode)
   (let* ((case-fold-search nil)
 	 (regexp (org-re-timestamp org-ts-type))
 	 (ts-type org-ts-type)
@@ -15098,7 +15138,7 @@ both scheduled and deadline timestamps."
 
 (defun org-check-after-date (d)
   "Check if there are deadlines or scheduled entries after date D."
-  (interactive (list (org-read-date)))
+  (interactive (list (org-read-date)) org-mode)
   (let* ((case-fold-search nil)
 	 (regexp (org-re-timestamp org-ts-type))
 	 (ts-type org-ts-type)
@@ -15122,7 +15162,8 @@ both scheduled and deadline timestamps."
 (defun org-check-dates-range (start-date end-date)
   "Check for deadlines/scheduled entries between START-DATE and END-DATE."
   (interactive (list (org-read-date nil nil nil "Range starts")
-		     (org-read-date nil nil nil "Range end")))
+		     (org-read-date nil nil nil "Range end"))
+               org-mode)
   (let ((case-fold-search nil)
 	(regexp (org-re-timestamp org-ts-type))
 	(callback
@@ -15154,7 +15195,7 @@ If the time range is actually in a table, the result is inserted into the
 next column.
 For time difference computation, a year is assumed to be exactly 365
 days in order to avoid rounding problems."
-  (interactive "P")
+  (interactive "P" org-mode)
   (or
    (org-clock-update-time-maybe)
    (save-excursion
@@ -15290,7 +15331,11 @@ into a past one.  Any year larger than 99 is returned unchanged."
   "Return the time corresponding to date D.
 D may be an absolute day number, or a calendar-type list (month day year)."
   (when (numberp d) (setq d (calendar-gregorian-from-absolute d)))
-  (org-encode-time 0 0 0 (nth 1 d) (car d) (nth 2 d)))
+  (org-encode-time
+   0 0 0
+   (calendar-extract-day d)
+   (calendar-extract-month d)
+   (calendar-extract-year d)))
 
 (defvar org-agenda-current-date)
 (defun org-calendar-holiday ()
@@ -15343,7 +15388,11 @@ This uses the icalendar.el library."
 	 buf rtn b e)
     (unwind-protect
         (with-current-buffer frombuf
-          (icalendar-export-region (point-min) (point-max) tmpfile)
+          (if (fboundp 'diary-icalendar-export-region)
+              (diary-icalendar-export-region (point-min) (point-max) tmpfile)
+            ;; Emacs < 31
+            (with-suppressed-warnings ((obsolete icalendar-export-region))
+              (icalendar-export-region (point-min) (point-max) tmpfile)))
           (setq buf (find-buffer-visiting tmpfile))
           (set-buffer buf)
           (goto-char (point-min))
@@ -15390,7 +15439,7 @@ day number."
 	      ("h"
 	       (let ((missing-hours
 		      (mod (+ (- (* 24 (- cday sday))
-				 (nth 2 (org-parse-time-string start)))
+				 (decoded-time-hour (org-parse-time-string start)))
 			      org-extend-today-until)
 			   value)))
 		 (setf n1 (if (= missing-hours 0) cday
@@ -15406,16 +15455,16 @@ day number."
 			 ;; Add N months to gregorian date D, i.e.,
 			 ;; a list (MONTH DAY YEAR).  Return a valid
 			 ;; gregorian date.
-			 (let ((m (+ (nth 0 d) n)))
+			 (let ((m (+ (calendar-extract-month d) n)))
 			   (list (mod m 12)
-				 (nth 1 d)
-				 (+ (/ m 12) (nth 2 d))))))
+				 (calendar-extract-day d)
+				 (+ (/ m 12) (calendar-extract-year d))))))
 		      (months		; Complete months to TARGET.
-		       (* (/ (+ (* 12 (- (nth 2 target) (nth 2 base)))
-				(- (nth 0 target) (nth 0 base))
+		       (* (/ (+ (* 12 (- (calendar-extract-year target) (calendar-extract-year base)))
+				(- (calendar-extract-month target) (calendar-extract-month base))
 				;; If START's day is greater than
 				;; TARGET's, remove incomplete month.
-				(if (> (nth 1 target) (nth 1 base)) 0 -1))
+				(if (> (calendar-extract-day target) (calendar-extract-day base)) 0 -1))
 			     value)
 			  value))
 		      (before (funcall add-months base months)))
@@ -15424,18 +15473,18 @@ day number."
 		       (calendar-absolute-from-gregorian
 			(funcall add-months before value)))))
 	      (_
-	       (let* ((d (nth 1 base))
-		      (m (nth 0 base))
-		      (y (nth 2 base))
+	       (let* ((d (calendar-extract-day   base))
+		      (m (calendar-extract-month base))
+		      (y (calendar-extract-year  base))
 		      (years		; Complete years to TARGET.
-		       (* (/ (- (nth 2 target)
+		       (* (/ (- (calendar-extract-year target)
 				y
 				;; If START's month and day are
 				;; greater than TARGET's, remove
 				;; incomplete year.
-				(if (or (> (nth 0 target) m)
-					(and (= (nth 0 target) m)
-					     (> (nth 1 target) d)))
+				(if (or (> (calendar-extract-month target) m)
+					(and (= (calendar-extract-month target) m)
+					     (> (calendar-extract-day target) d)))
 				    0
 				  1))
 			     value)
@@ -15443,7 +15492,7 @@ day number."
 		      (before (list m d (+ y years))))
 		 (setf n1 (calendar-absolute-from-gregorian before))
 		 (setf n2 (calendar-absolute-from-gregorian
-			   (list m d (+ (nth 2 before) value)))))))
+			   (list m d (+ (calendar-extract-year before) value)))))))
 	    ;; Handle PREFER parameter, if any.
 	    (cond
 	     ((eq prefer 'past)   (if (= cday n2) n2 n1))
@@ -15456,8 +15505,8 @@ day number."
 	((and (listp d) (= (length d) 3)) d)
 	((stringp d)
 	 (let ((d (org-parse-time-string d)))
-	   (list (nth 4 d) (nth 3 d) (nth 5 d))))
-	((listp d) (list (nth 4 d) (nth 3 d) (nth 5 d)))))
+	   (list (decoded-time-month d) (decoded-time-day d) (decoded-time-year d))))
+	((listp d) (list (decoded-time-month d) (decoded-time-day d) (decoded-time-year d)))))
 
 (defun org-timestamp-up (&optional arg)
   "Increase the date item at the cursor by one.
@@ -15465,7 +15514,7 @@ If the cursor is on the year, change the year.  If it is on the month,
 the day or the time, change that.  If the cursor is on the enclosing
 bracket, change the timestamp type.
 With prefix ARG, change by that many units."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-timestamp-change (prefix-numeric-value arg) nil 'updown))
 
 (defun org-timestamp-down (&optional arg)
@@ -15474,13 +15523,13 @@ If the cursor is on the year, change the year.  If it is on the month,
 the day or the time, change that.  If the cursor is on the enclosing
 bracket, change the timestamp type.
 With prefix ARG, change by that many units."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-timestamp-change (- (prefix-numeric-value arg)) nil 'updown))
 
 (defun org-timestamp-up-day (&optional arg)
   "Increase the date in the time stamp by one day.
 With prefix ARG, change that many days."
-  (interactive "p")
+  (interactive "p" org-mode)
   (if (and (not (org-at-timestamp-p 'lax))
 	   (org-at-heading-p))
       (org-todo 'up)
@@ -15489,7 +15538,7 @@ With prefix ARG, change that many days."
 (defun org-timestamp-down-day (&optional arg)
   "Decrease the date in the time stamp by one day.
 With prefix ARG, change that many days."
-  (interactive "p")
+  (interactive "p" org-mode)
   (if (and (not (org-at-timestamp-p 'lax))
 	   (org-at-heading-p))
       (org-todo 'down)
@@ -15581,7 +15630,7 @@ When matching, the match groups are the following:
 
 (defun org-toggle-timestamp-type ()
   "Toggle the type (<active> or [inactive]) of a time stamp."
-  (interactive)
+  (interactive nil org-mode)
   (when (org-at-timestamp-p 'lax)
     (let ((beg (match-beginning 0)) (end (match-end 0))
 	  (map '((?\[ . "<") (?\] . ">") (?< . "[") (?> . "]"))))
@@ -15620,7 +15669,7 @@ When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
 	with-hm inactive
 	(dm (max (nth 1 org-time-stamp-rounding-minutes) 1))
 	extra rem
-	ts time time0 fixnext clrgx)
+	ts time time-original time0 fixnext clrgx)
     (unless timestamp? (user-error "Not at a timestamp"))
     (if (and (not what) (eq timestamp? 'bracket))
 	(org-toggle-timestamp-type)
@@ -15652,30 +15701,52 @@ When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
       (when (string-match "^.\\{10\\}.*?[0-9]+:[0-9][0-9]" ts)
 	(setq with-hm t))
       (setq time0 (org-parse-time-string ts))
+      ;; Capture the original timestamp for direction validation later
+      (setq time-original (org-encode-time time0))
       (let ((increment n))
         (if (and updown
 	         (eq timestamp? 'minute)
 	         (not current-prefix-arg))
 	    ;; This looks like s-up and s-down.  Change by one rounding step.
             (progn
-	      (setq increment (* dm (cond ((> n 0) 1) ((< n 0) -1) (t 0))))
-	      (unless (= 0 (setq rem (% (nth 1 time0) dm)))
-	        (setcar (cdr time0) (+ (nth 1 time0)
-				       (if (> n 0) (- rem) (- dm rem))))))
+              (setq increment (* dm (cond ((> n 0) 1) ((< n 0) -1) (t 0))))
+              (unless (= 0 (setq rem (% (decoded-time-minute time0) dm)))
+                (setf (decoded-time-minute time0)
+                      (+ (decoded-time-minute time0)
+                         (if (> n 0) (- rem) (- dm rem))))))
           ;; Do not round anything in `org-modify-ts-extra' when prefix
           ;; argument is supplied - just use whatever is provided by the
           ;; prefix argument.
           (setq dm 1))
         (setq time
 	      (org-encode-time
-               (apply #'list
-                      (or (car time0) 0)
-                      (+ (if (eq timestamp? 'minute) increment 0) (nth 1 time0))
-                      (+ (if (eq timestamp? 'hour) increment 0)   (nth 2 time0))
-                      (+ (if (eq timestamp? 'day) increment 0)    (nth 3 time0))
-                      (+ (if (eq timestamp? 'month) increment 0)  (nth 4 time0))
-                      (+ (if (eq timestamp? 'year) increment 0)   (nth 5 time0))
-                      (nthcdr 6 time0)))))
+               (org-decoded-time-add
+                time0
+                (make-decoded-time
+                 (cl-ecase timestamp?
+                   (minute :minute)
+                   (hour :hour)
+                   (day :day)
+                   (month :month)
+                   (year :year))
+                 increment)))))
+      ;; Validation if we're modifying hour or minute fields
+      (when (and with-hm
+                 (memq timestamp? '(hour minute))
+                 (not (zerop n)))
+        ;; Use time-less-p to compare the original timestamp to the
+        ;; new one so that we ensure that the direction was
+        ;; respected. In the case of the DST gap, normalization of the
+        ;; timestamp post-shift results in wrapping that does not
+        ;; match the intended direction e.g. 3:00 on the DST date
+        ;; shifted down by 5 minutes results in 3:55
+        (unless (if (> n 0)
+                    (time-less-p time-original time)
+                  (time-less-p time time-original))
+          (insert ts)
+          (user-error "Cannot shift %s into the DST gap (according to current timezone '%s')"
+                      ts
+                      (cadr (current-time-zone time-original)))))
       (when (and (memq timestamp? '(hour minute))
 		 extra
 		 (string-match "-\\([012][0-9]\\):\\([0-5][0-9]\\)" extra))
@@ -15693,13 +15764,15 @@ When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
 	(setq extra (org-modify-ts-extra extra timestamp? n dm)))
       (when (eq what 'calendar)
 	(let ((cal-date (org-get-date-from-calendar)))
-	  (setcar (nthcdr 4 time0) (nth 0 cal-date)) ; month
-	  (setcar (nthcdr 3 time0) (nth 1 cal-date)) ; day
-	  (setcar (nthcdr 5 time0) (nth 2 cal-date)) ; year
-	  (setcar time0 (or (car time0) 0))
-	  (setcar (nthcdr 1 time0) (or (nth 1 time0) 0))
-	  (setcar (nthcdr 2 time0) (or (nth 2 time0) 0))
-	  (setq time (org-encode-time time0))))
+          (setq time (org-encode-time
+                      (decoded-time-set-defaults
+                       (make-decoded-time
+                        :month (calendar-extract-month cal-date)
+                        :day   (calendar-extract-day   cal-date)
+                        :year  (calendar-extract-year  cal-date)
+                        :second (decoded-time-second time0)
+                        :minute (decoded-time-minute time0)
+                        :hour   (decoded-time-hour   time0)))))))
       ;; Insert the new timestamp, and ensure point stays in the same
       ;; category as before (i.e. not after the last position in that
       ;; category).
@@ -15863,12 +15936,16 @@ A prefix ARG can be used to force the current date."
 (defun org-date-from-calendar ()
   "Insert time stamp corresponding to cursor date in *Calendar* buffer.
 If there is already a time stamp at the cursor position, update it."
-  (interactive)
+  (interactive nil org-mode)
   (if (org-at-timestamp-p 'lax)
       (org-timestamp-change 0 'calendar)
     (let ((cal-date (org-get-date-from-calendar)))
       (org-insert-timestamp
-       (org-encode-time 0 0 0 (nth 1 cal-date) (car cal-date) (nth 2 cal-date))))))
+       (org-encode-time
+        0 0 0
+        (calendar-extract-day cal-date)
+        (calendar-extract-month cal-date)
+        (calendar-extract-year cal-date))))))
 
 (defcustom org-image-actual-width t
   "When non-nil, use the actual width of images when inlining them.
@@ -16116,7 +16193,7 @@ If the current buffer does not, find the first agenda file."
 If the file is not present in the list, it is added to the front.  If it is
 present, it is moved there.  With optional argument TO-END, add/move to the
 end of the list."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((org-agenda-skip-unavailable-files nil)
 	(file-alist (mapcar (lambda (x)
 			      (cons (file-truename x) x))
@@ -16140,7 +16217,7 @@ end of the list."
   "Remove current file from the list of files in variable `org-agenda-files'.
 These are the files which are being checked for agenda entries.
 Optional argument FILE means use this file instead of the current."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((org-agenda-skip-unavailable-files nil)
 	 (file (or file buffer-file-name
 		   (user-error "Current buffer does not visit a file")))
@@ -16329,7 +16406,7 @@ It makes sense to do so if `org-cdlatex-mode' is active and if the cursor is
 (defun org-cdlatex-underscore-caret (&optional _arg)
   "Execute `cdlatex-sub-superscript' in LaTeX fragments.
 Revert to the normal definition outside of these fragments."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (org-inside-LaTeX-fragment-p)
       (call-interactively 'cdlatex-sub-superscript)
     (let (org-cdlatex-mode)
@@ -16338,7 +16415,7 @@ Revert to the normal definition outside of these fragments."
 (defun org-cdlatex-math-modify (&optional _arg)
   "Execute `cdlatex-math-modify' in LaTeX fragments.
 Revert to the normal definition outside of these fragments."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (org-inside-LaTeX-fragment-p)
       (call-interactively 'cdlatex-math-modify)
     (let (org-cdlatex-mode)
@@ -16352,7 +16429,7 @@ ENVIRONMENT and ITEM are passed to `cdlatex-environment'.
 The inserted environment is indented to current indentation
 unless point is at the beginning of the line, in which the
 environment remains unintended."
-  (interactive)
+  (interactive nil org-mode)
   ;; cdlatex-environment always return nil.  Therefore, capture output
   ;; first and determine if an environment was selected.
   (let* ((beg (point-marker))
@@ -16524,7 +16601,7 @@ fragments in the buffer.
 With a `\\[universal-argument] \\[universal-argument] \
 \\[universal-argument]' prefix argument ARG, clear image for all
 fragments in the buffer."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((not (display-graphic-p)) nil)
    ((and untrusted-content (not org--latex-preview-when-risky)) nil)
@@ -16999,6 +17076,11 @@ holder is missing, the positive one (without the \"NO-\") will be
 assumed to be present at the end of the template.
 DEF-PKG and PKG are assumed to be alists of options/packagename lists.
 EXTRA is a string.
+
+Note that setting `org-latex-default-packages-alist' to nil is equivalent
+to [NO-DEFAULT-PACKAGES] and setting `org-latex-packages-alist' to nil is
+equivalent to [NO-PACKAGES].
+
 SNIPPETS-P indicates if this is run to create snippet images for HTML."
   (let (rpl (end ""))
     (if (string-match "^[ \t]*\\[\\(NO-\\)?DEFAULT-PACKAGES\\][ \t]*\n?" tpl)
@@ -17173,7 +17255,7 @@ Set `org-speed-command' to the appropriate command as a side effect."
   "Like `self-insert-command', use `overwrite-mode' for whitespace in tables.
 If the cursor is in a table looking at whitespace, the whitespace is
 overwritten, and the table is not marked as requiring realignment."
-  (interactive "p")
+  (interactive "p" org-mode)
   (cond
    ((org--speed-command-p)
     (cond
@@ -17240,7 +17322,7 @@ When deleting backwards, in tables this function will insert whitespace in
 front of the next \"|\" separator, to keep the table aligned.  The table will
 still be marked for re-alignment if the field did fill the entire column,
 because, in this case the deletion might narrow the column."
-  (interactive "p")
+  (interactive "p" org-mode)
   (save-match-data
     (if (and (= N 1)
 	     (not overwrite-mode)
@@ -17259,7 +17341,7 @@ When deleting characters, in tables this function will insert whitespace in
 front of the next \"|\" separator, to keep the table aligned.  The table will
 still be marked for re-alignment if the field did fill the entire column,
 because, in this case the deletion might narrow the column."
-  (interactive "p")
+  (interactive "p" org-mode)
   (save-match-data
     (cond
      ((or (/= N 1)
@@ -17314,7 +17396,7 @@ because, in this case the deletion might narrow the column."
 This uses the `org-mode-transpose-word-syntax-table' syntax
 table, which interprets characters in `org-emphasis-alist' as
 word constituents."
-  (interactive)
+  (interactive nil org-mode)
   (org-with-syntax-table org-mode-transpose-word-syntax-table
     (call-interactively 'transpose-words)))
 
@@ -17477,7 +17559,7 @@ See `org-ctrl-c-ctrl-c-hook' for more information.")
 Call `org-table-previous-field' within a table.
 When ARG is nil, cycle globally through visibility states.
 When ARG is a numeric prefix, show contents of this level."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((org-at-table-p) (call-interactively 'org-table-previous-field))
    ((integerp arg)
@@ -17500,10 +17582,10 @@ by one as a first step, and exits immediately if a function from
 the hook returns non-nil.  In the absence of a specific context,
 the function also runs `org-shiftmetaleft-final-hook' using the
 same logic."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((and (eq system-type 'darwin)
-         (or (eq org-support-shift-select 'always)
+         (or (memq org-support-shift-select '(always except-timestamps everywhere))
              (and org-support-shift-select (org-region-active-p))))
     (org-call-for-shift-select 'backward-char))
    ((run-hook-with-args-until-success 'org-shiftmetaleft-hook))
@@ -17527,10 +17609,10 @@ by one as a first step, and exits immediately if a function from
 the hook returns non-nil.  In the absence of a specific context,
 the function also runs `org-shiftmetaright-final-hook' using the
 same logic."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((and (eq system-type 'darwin)
-         (or (eq org-support-shift-select 'always)
+         (or (memq org-support-shift-select '(always except-timestamps everywhere))
              (and org-support-shift-select (org-region-active-p))))
     (org-call-for-shift-select 'forward-char))
    ((run-hook-with-args-until-success 'org-shiftmetaright-hook))
@@ -17555,7 +17637,7 @@ one as a first step, and exits immediately if a function from the
 hook returns non-nil.  In the absence of a specific context, the
 function also runs `org-shiftmetaup-final-hook' using the same
 logic."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-shiftmetaup-hook))
    ((org-at-table-p) (call-interactively 'org-table-kill-row))
@@ -17576,7 +17658,7 @@ by one as a first step, and exits immediately if a function from
 the hook returns non-nil.  In the absence of a specific context,
 the function also runs `org-shiftmetadown-final-hook' using the
 same logic."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-shiftmetadown-hook))
    ((org-at-table-p) (call-interactively 'org-table-insert-row))
@@ -17601,7 +17683,7 @@ This function runs the functions in `org-metaleft-hook' one by
 one as a first step, and exits immediately if a function from the
 hook returns non-nil.  In the absence of a specific context, the
 function runs `org-metaleft-final-hook' using the same logic."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-metaleft-hook))
    ((org-at-table-p) (org-call-with-arg 'org-table-move-column 'left))
@@ -17640,7 +17722,7 @@ This function runs the functions in `org-metaright-hook' one by
 one as a first step, and exits immediately if a function from the
 hook returns non-nil.  In the absence of a specific context, the
 function runs `org-metaright-final-hook' using the same logic."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-metaright-hook))
    ((org-at-table-p) (call-interactively 'org-table-move-column))
@@ -17705,7 +17787,7 @@ This function runs the functions in `org-metaup-hook' one by one
 as a first step, and exits immediately if a function from the
 hook returns non-nil.  In the absence of a specific context, the
 function runs `org-metaup-final-hook' using the same logic."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-metaup-hook))
    ((and (org-region-active-p)
@@ -17785,7 +17867,7 @@ This function runs the functions in `org-metadown-hook' one by
 one as a first step, and exits immediately if a function from the
 hook returns non-nil.  In the absence of a specific context, the
 function runs `org-metadown-final-hook' using the same logic."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-metadown-hook))
    ((and (org-region-active-p)
@@ -17855,22 +17937,23 @@ If none of the previous steps succeed and
 `org-support-shift-select' is non-nil, the function runs
 `shift-select-mode' associated command.  See that variable for
 more information."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-shiftup-hook))
    ((and org-support-shift-select (org-region-active-p))
     (org-call-for-shift-select 'previous-line))
-   ((org-at-timestamp-p 'lax)
+   ((and (not (eq org-support-shift-select 'everywhere))
+         (org-at-timestamp-p 'lax))
     (call-interactively (if org-edit-timestamp-down-means-later
 			    'org-timestamp-down 'org-timestamp-up)))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 org-priority-enable-commands
 	 (org-at-heading-p))
     (call-interactively 'org-priority-up))
    ((and (not org-support-shift-select) (org-at-item-p))
     (call-interactively 'org-previous-item))
    ((org-clocktable-try-shift 'up arg))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-table-p))
     (org-table-move-cell-up))
    ((run-hook-with-args-until-success 'org-shiftup-final-hook))
@@ -17894,22 +17977,23 @@ If none of the previous steps succeed and
 `org-support-shift-select' is non-nil, the function runs
 `shift-select-mode' associated command.  See that variable for
 more information."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-shiftdown-hook))
    ((and org-support-shift-select (org-region-active-p))
     (org-call-for-shift-select 'next-line))
-   ((org-at-timestamp-p 'lax)
+   ((and (not (eq org-support-shift-select 'everywhere))
+         (org-at-timestamp-p 'lax))
     (call-interactively (if org-edit-timestamp-down-means-later
 			    'org-timestamp-up 'org-timestamp-down)))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 org-priority-enable-commands
 	 (org-at-heading-p))
     (call-interactively 'org-priority-down))
    ((and (not org-support-shift-select) (org-at-item-p))
     (call-interactively 'org-next-item))
    ((org-clocktable-try-shift 'down arg))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-table-p))
     (org-table-move-cell-down))
    ((run-hook-with-args-until-success 'org-shiftdown-final-hook))
@@ -17936,13 +18020,15 @@ function runs `org-shiftright-final-hook' using the same logic.
 If none of the above succeeds and `org-support-shift-select' is
 non-nil, runs `shift-select-mode' specific command.  See that
 variable for more information."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-shiftright-hook))
    ((and org-support-shift-select (org-region-active-p))
     (org-call-for-shift-select 'forward-char))
-   ((org-at-timestamp-p 'lax) (call-interactively 'org-timestamp-up-day))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (eq org-support-shift-select 'everywhere))
+         (org-at-timestamp-p 'lax))
+    (call-interactively 'org-timestamp-up-day))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-heading-p))
     (let ((org-inhibit-logging
 	   (not org-treat-S-cursor-todo-selection-as-state-change))
@@ -17950,15 +18036,15 @@ variable for more information."
 	   (not org-treat-S-cursor-todo-selection-as-state-change)))
       (org-call-with-arg 'org-todo 'right)))
    ((or (and org-support-shift-select
-	     (not (eq org-support-shift-select 'always))
+	     (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	     (org-at-item-bullet-p))
 	(and (not org-support-shift-select) (org-at-item-p)))
     (org-call-with-arg 'org-cycle-list-bullet nil))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-property-p))
     (call-interactively 'org-property-next-allowed-value))
    ((org-clocktable-try-shift 'right arg))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-table-p))
     (org-table-move-cell-right))
    ((run-hook-with-args-until-success 'org-shiftright-final-hook))
@@ -17985,13 +18071,15 @@ function runs `org-shiftleft-final-hook' using the same logic.
 If none of the above succeeds and `org-support-shift-select' is
 non-nil, runs `shift-select-mode' specific command.  See that
 variable for more information."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((run-hook-with-args-until-success 'org-shiftleft-hook))
    ((and org-support-shift-select (org-region-active-p))
     (org-call-for-shift-select 'backward-char))
-   ((org-at-timestamp-p 'lax) (call-interactively 'org-timestamp-down-day))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (eq org-support-shift-select 'everywhere))
+         (org-at-timestamp-p 'lax))
+    (call-interactively 'org-timestamp-down-day))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-heading-p))
     (let ((org-inhibit-logging
 	   (not org-treat-S-cursor-todo-selection-as-state-change))
@@ -17999,15 +18087,15 @@ variable for more information."
 	   (not org-treat-S-cursor-todo-selection-as-state-change)))
       (org-call-with-arg 'org-todo 'left)))
    ((or (and org-support-shift-select
-	     (not (eq org-support-shift-select 'always))
+	     (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	     (org-at-item-bullet-p))
 	(and (not org-support-shift-select) (org-at-item-p)))
     (org-call-with-arg 'org-cycle-list-bullet 'previous))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-property-p))
     (call-interactively 'org-property-previous-allowed-value))
    ((org-clocktable-try-shift 'left arg))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-table-p))
     (org-table-move-cell-left))
    ((run-hook-with-args-until-success 'org-shiftleft-final-hook))
@@ -18017,11 +18105,11 @@ variable for more information."
 
 (defun org-shiftcontrolright ()
   "Switch to next TODO set."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((and org-support-shift-select (org-region-active-p))
     (org-call-for-shift-select 'forward-word))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-heading-p))
     (org-call-with-arg 'org-todo 'nextset))
    (org-support-shift-select
@@ -18030,11 +18118,11 @@ variable for more information."
 
 (defun org-shiftcontrolleft ()
   "Switch to previous TODO set."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((and org-support-shift-select (org-region-active-p))
     (org-call-for-shift-select 'backward-word))
-   ((and (not (eq org-support-shift-select 'always))
+   ((and (not (memq org-support-shift-select '(always except-timestamps everywhere)))
 	 (org-at-heading-p))
     (org-call-with-arg 'org-todo 'previousset))
    (org-support-shift-select
@@ -18044,18 +18132,24 @@ variable for more information."
 (defun org-shiftcontrolup (&optional n)
   "Change timestamps synchronously up in CLOCK log lines.
 Optional argument N tells to change by that many units."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (and (org-at-clock-log-p) (org-at-timestamp-p 'lax))
-      (let (org-support-shift-select)
+      (let ((org-support-shift-select
+             (if (eq org-support-shift-select 'everywhere)
+                 org-support-shift-select
+               nil)))
 	(org-clock-timestamps-up n))
     (user-error "Not at a clock log")))
 
 (defun org-shiftcontroldown (&optional n)
   "Change timestamps synchronously down in CLOCK log lines.
 Optional argument N tells to change by that many units."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (and (org-at-clock-log-p) (org-at-timestamp-p 'lax))
-      (let (org-support-shift-select)
+      (let ((org-support-shift-select
+             (if (eq org-support-shift-select 'everywhere)
+                 org-support-shift-select
+               nil)))
 	(org-clock-timestamps-down n))
     (user-error "Not at a clock log")))
 
@@ -18063,7 +18157,7 @@ Optional argument N tells to change by that many units."
   "Increment the number at point.
 With an optional prefix numeric argument INC, increment using
 this numeric value."
-  (interactive "p")
+  (interactive "p" org-mode)
   (if (not (number-at-point))
       (user-error "Not on a number")
     (unless inc (setq inc 1))
@@ -18082,19 +18176,19 @@ this numeric value."
   "Decrement the number at point.
 With an optional prefix numeric argument INC, decrement using
 this numeric value."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-increase-number-at-point (- (or inc 1))))
 
 (defun org-ctrl-c-ret ()
   "Call `org-table-hline-and-move' or `org-insert-heading'."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((org-at-table-p) (call-interactively 'org-table-hline-and-move))
    (t (call-interactively 'org-insert-heading))))
 
 (defun org-copy-visible (beg end)
   "Copy the visible parts of the region."
-  (interactive "r")
+  (interactive "r" org-mode)
   (let ((result ""))
     (while (/= beg end)
       (while (org-invisible-p beg)
@@ -18113,7 +18207,7 @@ this numeric value."
   "Copy region in table or copy current subtree.
 Calls `org-table-copy-region' or `org-copy-subtree', depending on
 context.  See the individual commands for more information."
-  (interactive)
+  (interactive nil org-mode)
   (call-interactively
    (if (org-at-table-p) #'org-table-copy-region #'org-copy-subtree)))
 
@@ -18121,7 +18215,7 @@ context.  See the individual commands for more information."
   "Cut region in table or cut current subtree.
 Calls `org-table-cut-region' or `org-cut-subtree', depending on
 context.  See the individual commands for more information."
-  (interactive)
+  (interactive nil org-mode)
   (call-interactively
    (if (org-at-table-p) #'org-table-cut-region #'org-cut-subtree)))
 
@@ -18129,7 +18223,7 @@ context.  See the individual commands for more information."
   "Paste rectangular region into table, or paste subtree relative to level.
 Calls `org-table-paste-rectangle' or `org-paste-subtree', depending on context.
 See the individual commands for more information."
-  (interactive "P")
+  (interactive "P" org-mode)
   (if (org-at-table-p)
       (org-table-paste-rectangle)
     (org-paste-subtree arg)))
@@ -18153,7 +18247,7 @@ When at an active timestamp, call `org-timestamp'.
 When at an inactive timestamp, call `org-timestamp-inactive'.
 On a link, call `ffap' to visit the link at point.
 Otherwise, return a user error."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((element (org-element-at-point)))
     (barf-if-buffer-read-only)
     (pcase (org-element-type element)
@@ -18264,7 +18358,7 @@ This command does many different things, depending on context:
   before code block evaluation, by default every code block
   evaluation requires confirmation.  Code block evaluation can be
   inhibited by setting `org-babel-no-eval-on-ctrl-c-ctrl-c'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (cond
    ((bound-and-true-p org-columns-overlays) (org-columns-quit))
    ((or (bound-and-true-p org-clock-overlays) org-occur-highlights)
@@ -18514,7 +18608,8 @@ ignoring region."
   (interactive
    (cons current-prefix-arg
          (when (and (not current-prefix-arg) (use-region-p))
-           (list (region-beginning) (region-end)))))
+           (list (region-beginning) (region-end))))
+   org-mode)
   (unless (and beg end)
     ;; No region selected or BEG/END arguments not passed.
     (setq beg (line-beginning-position (if arg 1 0))
@@ -18573,7 +18668,7 @@ ignoring region."
 If `org-special-ctrl-o' is nil, just call `open-line' everywhere.
 As a special case, when a document starts with a table, allow
 calling `open-line' on the very first character."
-  (interactive "*p")
+  (interactive "*p" org-mode)
   (if (and org-special-ctrl-o (/= (point) 1) (org-at-table-p))
       (org-table-insert-row)
     (open-line n)))
@@ -18602,7 +18697,7 @@ a timestamp, a link or a citation, call `org-open-at-point'.
 However, it will not happen if point is in a table or on a \"dead\"
 object (e.g., within a comment).  In these case, you need to use
 `org-open-at-point' directly."
-  (interactive "i\nP\np")
+  (interactive "i\nP\np" org-mode)
   (let* ((context (if org-return-follows-link (org-element-context)
 		    (org-element-at-point)))
          (element-type (org-element-type context)))
@@ -18683,7 +18778,7 @@ See the individual commands for more information.
 When inserting a newline, if `org-adapt-indentation' is t:
 indent the line if `electric-indent-mode' is disabled, don't
 indent it if it is enabled."
-  (interactive)
+  (interactive nil org-mode)
   (org-return (not electric-indent-mode)))
 
 (defun org-ctrl-c-tab (&optional arg)
@@ -18691,7 +18786,7 @@ indent it if it is enabled."
 Call `org-table-toggle-column-width' if point is in a table.
 Otherwise provide a compact view of the children.  ARG is the
 level to hide."
-  (interactive "p")
+  (interactive "p" org-mode)
   (cond
    ((org-at-table-p)
     (call-interactively #'org-table-toggle-column-width))
@@ -18707,7 +18802,7 @@ level to hide."
   "Compute table, or change heading status of lines.
 Calls `org-table-recalculate' or `org-toggle-heading',
 depending on context."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((org-at-table-p)
     (call-interactively 'org-table-recalculate))
@@ -18720,7 +18815,7 @@ depending on context."
 Also turns a plain line or a region of lines into list items.
 Calls `org-table-insert-hline', `org-toggle-item', or
 `org-cycle-list-bullet', depending on context."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((org-at-table-p)
     (call-interactively 'org-table-insert-hline))
@@ -18757,7 +18852,7 @@ When converting a line into a heading, the number of stars is chosen
 such that the lines become children of the current entry.  However,
 when a numeric prefix argument is given, its value determines the
 number of stars to add."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((skip-blanks
 	 ;; Return beginning of first non-blank line, starting from
 	 ;; line at POS.
@@ -18846,7 +18941,7 @@ number of stars to add."
 Calls `org-insert-heading', `org-insert-item' or
 `org-table-wrap-region', depending on context.  When called with
 an argument, unconditionally call `org-insert-heading'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (or (run-hook-with-args-until-success 'org-metareturn-hook)
       (call-interactively (cond (arg #'org-insert-heading)
 				((org-at-table-p) #'org-table-wrap-region)
@@ -19344,7 +19439,7 @@ With prefix arg UNCOMPILED, load the uncompiled versions."
 
 (defun org-force-self-insert (N)
   "Needed to enforce self-insert under remapping."
-  (interactive "p")
+  (interactive "p" org-mode)
   (self-insert-command N))
 
 (defun org-quote-vert (s)
@@ -19637,19 +19732,23 @@ earliest time on the cursor date that Org treats as that date
 	(setq hod (string-to-number (match-string 1 tp))
 	      mod (string-to-number (match-string 2 tp))))
       (or tp (let ((now (decode-time)))
-	       (setq hod (nth 2 now)
-		     mod (nth 1 now)))))
+	       (setq hod (decoded-time-hour now)
+		     mod (decoded-time-minute now)))))
     (cond
      ((eq major-mode 'calendar-mode)
       (setq date (calendar-cursor-to-date)
 	    defd (org-encode-time 0 (or mod 0) (or hod org-extend-today-until)
-                                  (nth 1 date) (nth 0 date) (nth 2 date))))
+                                  (calendar-extract-day date)
+                                  (calendar-extract-month date)
+                                  (calendar-extract-year date))))
      ((eq major-mode 'org-agenda-mode)
       (setq day (get-text-property (point) 'day))
       (when day
 	(setq date (calendar-gregorian-from-absolute day)
 	      defd (org-encode-time 0 (or mod 0) (or hod org-extend-today-until)
-                                    (nth 1 date) (nth 0 date) (nth 2 date))))))
+                                    (calendar-extract-day date)
+                                    (calendar-extract-month date)
+                                    (calendar-extract-year date))))))
     (or defd (current-time))))
 
 (defun org-mark-subtree (&optional up)
@@ -19657,7 +19756,7 @@ earliest time on the cursor date that Org treats as that date
 This puts point at the start of the current subtree, and mark at
 the end.  If a numeric prefix UP is given, move up into the
 hierarchy of headlines by UP levels before marking the subtree."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-with-limited-levels
    (cond ((org-at-heading-p) (forward-line 0))
 	 ((org-before-first-heading-p) (user-error "Not in a subtree"))
@@ -19881,7 +19980,7 @@ list structure.  Instead, use \\<org-mode-map>`\\[org-shiftmetaleft]' or \
 `\\[org-shiftmetaright]'.
 
 Also align node properties according to `org-property-format'."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((element (save-excursion (forward-line 0) (org-element-at-point-no-context)))
 	 (type (org-element-type element)))
     (unless (or (org-at-heading-p) ; headline has no indent ever.
@@ -19950,7 +20049,7 @@ Called from a program, START and END specify the region to
 indent.  The function will not indent contents of example blocks,
 verse blocks and export blocks as leading white spaces are
 assumed to be significant there."
-  (interactive "r")
+  (interactive "r" org-mode)
   (save-excursion
     (goto-char start)
     (skip-chars-forward " \r\t\n")
@@ -20068,7 +20167,7 @@ assumed to be significant there."
 (defun org-indent-drawer ()
   "Indent the drawer at point.
 Signal an error when not at a drawer."
-  (interactive)
+  (interactive nil org-mode)
   (let ((element (org-element-at-point)))
     (unless (org-element-type-p element '(drawer property-drawer))
       (user-error "Not at a drawer"))
@@ -20080,7 +20179,7 @@ Signal an error when not at a drawer."
 (defun org-indent-block ()
   "Indent the block at point.
 Signal an error when not at a block."
-  (interactive)
+  (interactive nil org-mode)
   (let ((element (org-element-at-point)))
     (unless (org-element-type-p
              element
@@ -20372,7 +20471,8 @@ fill each of the elements in the active region, instead of just
 filling the current element."
   (interactive (progn
 		 (barf-if-buffer-read-only)
-		 (list (when current-prefix-arg 'full) t)))
+		 (list (when current-prefix-arg 'full) t))
+               org-mode)
   (let ((hash (and (not (buffer-modified-p))
 		   (org-buffer-hash))))
     (cond
@@ -20448,7 +20548,7 @@ to fixed-width ones.
 
 Blank lines at the end of the region are ignored unless the
 region only contains such lines."
-  (interactive)
+  (interactive nil org-mode)
   (if (not (org-region-active-p))
       ;; No region:
       ;;
@@ -20586,7 +20686,7 @@ returns.
 
 Return point at beginning of the opening line of found block.
 Throw an error if no block is found."
-  (interactive "p")
+  (interactive "p" org-mode)
   (let ((re (or block-regexp "^[ \t]*#\\+BEGIN"))
 	(case-fold-search t)
 	(search-fn (if backward #'re-search-backward #'re-search-forward))
@@ -20618,7 +20718,7 @@ Throw an error if no block is found."
   "Jump to the previous block.
 With a prefix argument ARG, jump backward ARG many source blocks.
 When BLOCK-REGEXP is non-nil, use this regexp to find blocks."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-next-block arg t block-regexp))
 
 
@@ -20753,7 +20853,7 @@ strictly within a source block, use appropriate comment syntax."
   "Call the comment command you mean.
 Call `org-toggle-comment' if on a heading, otherwise call
 `comment-dwim'."
-  (interactive "*P")
+  (interactive "*P" org-mode)
   (cond ((org-at-heading-p)
 	 (call-interactively #'org-toggle-comment))
 	(t (call-interactively #'comment-dwim))))
@@ -20970,6 +21070,12 @@ end."
     (when (and (not (eq org-yank-image-save-method 'attach))
                (not (file-directory-p dirname)))
       (make-directory dirname t))
+    (when (file-exists-p absname)
+      (if (y-or-n-p
+           (format "Yank target %s already exists.  Overwrite?"
+                   absname))
+          (delete-file absname)
+        (error "Yank target already exists: %s" absname)))
     ;; DATA is a raw image.  Tell Emacs to write it raw, without
     ;; trying to auto-detect the coding system.
     (let ((coding-system-for-write 'emacs-internal))
@@ -21152,6 +21258,12 @@ SEPARATOR is the string to insert after each link."
                  (expand-file-name
                   (file-name-nondirectory filename)
                   org-yank-image-save-method)))
+            (when (file-exists-p stored-filename)
+              (if (y-or-n-p
+                   (format "DnD target %s already exists.  Overwrite?"
+                           stored-filename))
+                  (delete-file stored-filename)
+                (error "DnD target already exists: %s" stored-filename)))
             (funcall
              (pcase method
                ('cp #'copy-file)
@@ -21214,7 +21326,7 @@ into the buffer.
 
 Export of such citations to both LaTeX and HTML is handled by the contributed
 package ox-bibtex by Taru Karttunen."
-  (interactive)
+  (interactive nil org-mode)
   (let ((reftex-docstruct-symbol 'org--rds)
 	org--rds bib)
     (org-with-wide-buffer
@@ -21242,7 +21354,7 @@ If `org-special-ctrl-a/e' is symbol `reversed' then go to the
 start of the text on the second attempt.
 
 With argument N not nil or 1, move forward N - 1 lines first."
-  (interactive "^p")
+  (interactive "^p" org-mode)
   (let ((origin (point))
 	(special (pcase org-special-ctrl-a/e
 		   (`(,C-a . ,_) C-a) (_ org-special-ctrl-a/e)))
@@ -21306,7 +21418,7 @@ If `org-special-ctrl-a/e' is symbol `reversed' then ignore tags
 on the second attempt.
 
 With argument N not nil or 1, move forward N - 1 lines first."
-  (interactive "^p")
+  (interactive "^p" org-mode)
   (let ((origin (point))
 	(special (pcase org-special-ctrl-a/e
 		   (`(,_ . ,C-e) C-e) (_ org-special-ctrl-a/e)))
@@ -21361,7 +21473,7 @@ With argument N not nil or 1, move forward N - 1 lines first."
   "Go to beginning of sentence, or beginning of table field.
 This will call `backward-sentence' or `org-table-beginning-of-field',
 depending on context."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((element (org-element-at-point))
 	 (contents-begin (org-element-contents-begin element))
 	 (table (org-element-lineage element 'table t)))
@@ -21381,7 +21493,7 @@ depending on context."
   "Go to end of sentence, or end of table field.
 This will call `forward-sentence' or `org-table-end-of-field',
 depending on context."
-  (interactive)
+  (interactive nil org-mode)
   (if (and (org-at-heading-p)
 	   (save-restriction (skip-chars-forward " \t") (not (eolp))))
       (save-restriction
@@ -21413,7 +21525,7 @@ depending on context."
 The behavior of this command depends on the user options
 `org-special-ctrl-k' and `org-ctrl-k-protect-subtree' (which
 see)."
-  (interactive)
+  (interactive nil org-mode)
   (cond
    ((or (not org-special-ctrl-k)
 	(bolp)
@@ -21465,7 +21577,7 @@ plainly yank the text as it is.
 
 \[1] The test checks if the first non-white line is a heading
     and if there are no other headings with fewer stars."
-  (interactive "P")
+  (interactive "P" org-mode)
   (org-yank-generic 'yank arg))
 
 (defun org-yank-generic (command arg)
@@ -21878,7 +21990,7 @@ properties, clocking lines, logbook drawers, and blank lines."
 Stop at the first and last subheadings of a superior heading.
 Normally this only looks at visible headings, but when INVISIBLE-OK is
 non-nil it will also look at invisible ones."
-  (interactive "p")
+  (interactive "p" org-mode)
   (let ((backward? (and arg (< arg 0))))
     (if (org-before-first-heading-p)
 	(if backward? (goto-char (point-min)) (outline-next-heading))
@@ -21910,13 +22022,13 @@ non-nil it will also look at invisible ones."
 (defun org-backward-heading-same-level (arg &optional invisible-ok)
   "Move backward to the ARG'th subheading at same level as this one.
 Stop at the first and last subheadings of a superior heading."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-forward-heading-same-level (if arg (- arg) -1) invisible-ok))
 
 (defun org-next-visible-heading (arg)
   "Move to the next visible heading line.
 With ARG, repeats or can move backward if negative."
-  (interactive "p")
+  (interactive "p" org-mode)
   (let ((regexp (concat "^" (org-get-limited-outline-regexp))))
     (if (< arg 0)
 	(forward-line 0)
@@ -21939,7 +22051,7 @@ With ARG, repeats or can move backward if negative."
 (defun org-previous-visible-heading (arg)
   "Move to the previous visible heading.
 With ARG, repeats or can move forward if negative."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-next-visible-heading (- arg)))
 
 (defun org-forward-paragraph (&optional arg)
@@ -21957,7 +22069,7 @@ It also provides the following special moves for convenience:
   - on comment, example, export, source and verse blocks, stop
     at blank lines;
   - skip consecutive clocks, diary S-exps, and keywords."
-  (interactive "^p")
+  (interactive "^p" org-mode)
   (unless arg (setq arg 1))
   (if (< arg 0) (org-backward-paragraph (- arg))
     (while (and (> arg 0) (not (eobp)))
@@ -21981,7 +22093,7 @@ It also provides the following special moves for convenience:
   - on comment, example, export, source and verse blocks, stop
     at blank lines;
   - skip consecutive clocks, diary S-exps, and keywords."
-  (interactive "^p")
+  (interactive "^p" org-mode)
   (unless arg (setq arg 1))
   (if (< arg 0) (org-forward-paragraph (- arg))
     (while (and (> arg 0) (not (bobp)))
@@ -22074,7 +22186,7 @@ Function may return a real element, or a pseudo-element with type
 (defun org--forward-paragraph-once ()
   "Move forward to end of paragraph or equivalent, once.
 See `org-forward-paragraph'."
-  (interactive)
+  (interactive nil org-mode)
   (save-restriction
     (widen)
     (skip-chars-forward " \t\n")
@@ -22144,7 +22256,7 @@ See `org-forward-paragraph'."
 (defun org--backward-paragraph-once ()
   "Move backward to start of paragraph or equivalent, once.
 See `org-backward-paragraph'."
-  (interactive)
+  (interactive nil org-mode)
   (save-restriction
     (widen)
     (cond
@@ -22240,7 +22352,7 @@ See `org-backward-paragraph'."
 (defun org-forward-element ()
   "Move forward by one element.
 Move to the next element at the same level, when possible."
-  (interactive)
+  (interactive nil org-mode)
   (cond ((eobp) (user-error "Cannot move further down"))
 	((org-with-limited-levels (org-at-heading-p))
 	 (let ((origin (point)))
@@ -22260,7 +22372,7 @@ Move to the next element at the same level, when possible."
 (defun org-backward-element ()
   "Move backward by one element.
 Move to the previous element at the same level, when possible."
-  (interactive)
+  (interactive nil org-mode)
   (cond ((bobp) (user-error "Cannot move further up"))
 	((org-with-limited-levels (org-at-heading-p))
 	 ;; At a headline, move to the previous one, if any, or stay
@@ -22292,7 +22404,7 @@ Move to the previous element at the same level, when possible."
 
 (defun org-up-element ()
   "Move to upper element."
-  (interactive)
+  (interactive nil org-mode)
   (if (org-with-limited-levels (org-at-heading-p))
       (unless (org-up-heading-safe) (user-error "No surrounding element"))
     (let* ((elem (org-element-at-point))
@@ -22309,7 +22421,7 @@ Move to the previous element at the same level, when possible."
 
 (defun org-down-element ()
   "Move to inner element."
-  (interactive)
+  (interactive nil org-mode)
   (let ((element (org-element-at-point)))
     (cond
      ((org-element-type-p element '(plain-list table))
@@ -22324,7 +22436,7 @@ Move to the previous element at the same level, when possible."
 
 (defun org-drag-element-backward ()
   "Move backward element at point."
-  (interactive)
+  (interactive nil org-mode)
   (let ((elem (or (org-element-at-point)
 		  (user-error "No element at point"))))
     (if (org-element-type-p elem 'headline)
@@ -22356,7 +22468,7 @@ Move to the previous element at the same level, when possible."
 
 (defun org-drag-element-forward ()
   "Move forward element at point."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((pos (point))
 	 (elem (or (org-element-at-point)
 		   (user-error "No element at point"))))
@@ -22432,7 +22544,7 @@ ones already marked."
 (defun org-narrow-to-element ()
   "Narrow buffer to current element.
 Use the command `\\[widen]' to see the whole buffer again."
-  (interactive)
+  (interactive nil org-mode)
   (let ((elem (org-element-at-point)))
     (cond
      ((eq (car elem) 'headline)
@@ -22451,7 +22563,7 @@ Use the command `\\[widen]' to see the whole buffer again."
 (defun org-transpose-element ()
   "Transpose current and previous elements, keeping blank lines between.
 Point is moved after both elements."
-  (interactive)
+  (interactive nil org-mode)
   (org-skip-whitespace)
   (let ((end (org-element-end (org-element-at-point))))
     (org-drag-element-backward)
@@ -22461,7 +22573,7 @@ Point is moved after both elements."
   "Un-indent the visible part of the buffer.
 Relative indentation (between items, inside blocks, etc.) isn't
 modified."
-  (interactive)
+  (interactive nil org-mode)
   (unless (derived-mode-p 'org-mode)
     (user-error "Cannot un-indent a buffer not in Org mode"))
   (letrec ((parse-tree (org-element-parse-buffer 'greater-element nil 'defer))

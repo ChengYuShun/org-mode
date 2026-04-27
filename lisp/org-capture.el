@@ -535,7 +535,7 @@ you can escape ambiguous cases with a backward slash, e.g., \\%i."
 				     ((const :format "%v " :unnarrowed) (const t))
 				     ((const :format "%v " :table-line-pos) (string))
 				     ((const :format "%v " :kill-buffer) (const t))))))))
-  :safe nil)
+  :risky t)
 
 (defcustom org-capture-before-finalize-hook nil
   "Hook that is run right before a capture process is finalized.
@@ -1756,8 +1756,10 @@ buffers."
 	 (file (buffer-file-name (or (buffer-base-buffer buffer) buffer)))
 	 (time (let* ((c (or (org-capture-get :default-time) (current-time)))
 		      (d (decode-time c)))
-		 (if (< (nth 2 d) org-extend-today-until)
-		     (org-encode-time 0 59 23 (1- (nth 3 d)) (nth 4 d) (nth 5 d))
+		 (if (< (decoded-time-hour d) org-extend-today-until)
+		     (org-encode-time 0 59 23 (1- (decoded-time-day d))
+                                      (decoded-time-month d)
+                                      (decoded-time-year d))
 		   c)))
 	 (v-t (format-time-string (org-time-stamp-format nil) time))
 	 (v-T (format-time-string (org-time-stamp-format t) time))

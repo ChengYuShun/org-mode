@@ -51,7 +51,7 @@ by `org-edit-src-code'.")
 	(print-length nil)
         (prologue (cdr (assq :prologue params)))
         (epilogue (cdr (assq :epilogue params))))
-    (if (null vars) (concat body "\n")
+    (if (null vars) body
       (format "(let (%s)\n%s%s%s\n)"
 	      (mapconcat
 	       (lambda (var)
@@ -97,7 +97,7 @@ Convert LEXICAL into the form appropriate for `lexical-binding'
 and the LEXICAL argument to `eval'."
   (if (listp lexical)
       lexical
-    (not (null (member lexical '("yes" "t"))))))
+    (not (null (member lexical '("yes" "t" t))))))
 
 (defun org-babel-edit-prep:emacs-lisp (info)
   "Set `lexical-binding' in Org edit buffer.

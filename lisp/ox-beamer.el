@@ -95,6 +95,7 @@ For example, it could be set to \"allowframebreaks\"."
   :group 'org-export-beamer
   :version "24.4"
   :package-version '(Org . "8.0")
+  :safe #'string-or-null-p
   :type '(choice
 	  (const :tag "Do not insert a Beamer theme" nil)
 	  (string :tag "Beamer theme")))
@@ -129,12 +130,14 @@ close   The closing string of the environment."
 (defcustom org-beamer-outline-frame-title "Outline"
   "Default title of a frame containing an outline."
   :group 'org-export-beamer
+  :safe #'stringp
   :type '(string :tag "Outline frame title"))
 
 (defcustom org-beamer-outline-frame-options ""
   "Outline frame options appended after \\begin{frame}.
 You might want to put e.g. \"allowframebreaks=0.9\" here."
   :group 'org-export-beamer
+  :safe #'stringp
   :type '(string :tag "Outline frame options"))
 
 
@@ -144,6 +147,7 @@ The format string should have at most one \"%s\"-expression,
 which is replaced with the subtitle."
   :group 'org-export-beamer
   :version "26.1"
+  :safe #'stringp
   :package-version '(Org . "8.3")
   :type '(string :tag "Format string"))
 
@@ -1060,7 +1064,7 @@ file-local settings.
 Export is done in a buffer named \"*Org BEAMER Export*\", which
 will be displayed when `org-export-show-temporary-export-buffer'
 is non-nil."
-  (interactive)
+  (interactive nil org-mode)
   (org-export-to-buffer 'beamer "*Org BEAMER Export*"
     async subtreep visible-only body-only ext-plist
     (if (fboundp 'major-mode-remap)
@@ -1096,7 +1100,7 @@ parameters overriding Org default settings, but still inferior to
 file-local settings.
 
 Return output file's name."
-  (interactive)
+  (interactive nil org-mode)
   (let ((file (org-export-output-file-name ".tex" subtreep)))
     (org-export-to-file 'beamer file
       async subtreep visible-only body-only ext-plist)))
@@ -1130,7 +1134,7 @@ parameters overriding Org default settings, but still inferior to
 file-local settings.
 
 Return PDF file's name."
-  (interactive)
+  (interactive nil org-mode)
   (let ((file (org-export-output-file-name ".tex" subtreep)))
     (org-export-to-file 'beamer file
       async subtreep visible-only body-only ext-plist
@@ -1145,7 +1149,7 @@ the entry is set.
 
 In addition to this, the command will also set a tag as a visual
 aid, but the tag does not have any semantic meaning."
-  (interactive)
+  (interactive nil org-mode)
   ;; Make sure `org-beamer-environments-special' has a higher
   ;; priority than `org-beamer-environments-extra'.
   (let* ((envs (append org-beamer-environments-special

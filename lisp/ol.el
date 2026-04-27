@@ -36,6 +36,8 @@
 (require 'org-macs)
 (require 'org-fold)
 
+(require 'calendar)
+
 (defvar clean-buffer-list-kill-buffer-names)
 (defvar org-agenda-buffer-name)
 (defvar org-comment-string)
@@ -46,7 +48,6 @@
 (defvar org-src-source-file-name)
 (defvar org-ts-regexp)
 
-(declare-function calendar-cursor-to-date "calendar" (&optional error event))
 (declare-function dired-get-filename "dired" (&optional localp no-error-if-not-filep))
 (declare-function org-back-to-heading "org" (&optional invisible-ok))
 (declare-function org-before-first-heading-p "org" ())
@@ -216,7 +217,7 @@ link.
   :package-version '(Org . "9.8")
   :type '(alist :tag "Link display parameters"
 		:value-type plist)
-  :safe nil)
+  :risky t)
 
 (defun org-link--set-link-display (symbol value)
   "Set `org-link-descriptive' (SYMBOL) to VALUE.
@@ -390,7 +391,7 @@ another window."
 		(choice
 		 (const wl)
 		 (const wl-other-frame))))
-  :safe nil)
+  :risky t)
 
 (defcustom org-link-search-must-match-exact-headline 'query-to-create
   "Control fuzzy link behavior when specific matches not found.
@@ -554,7 +555,7 @@ expense of higher lag."
   :group 'org-link
   :package-version '(Org . "9.8")
   :type 'number
-  :safe t)
+  :safe #'numberp)
 
 (defcustom org-link-preview-batch-size 6
   "Number of links that are previewed at once with `org-link-preview'.
@@ -565,7 +566,7 @@ expense of higher lag."
   :group 'org-link
   :package-version '(Org . "9.8")
   :type 'natnum
-  :safe t)
+  :safe #'natnump)
 
 (defcustom org-display-remote-inline-images 'skip
   "How to display remote inline images.
@@ -604,7 +605,7 @@ Possible values:
           (const :tag "Limit to window width" window)
           (integer :tag "Limit to a number of pixels")
           (float :tag "Limit to a fraction of window width"))
-  :safe t)
+  :safe (lambda (x) (or (numberp x) (member x '(nil 'fill-column 'window)))))
 
 (defcustom org-image-align 'left
   "How to align images previewed using `org-link-preview-region'.
@@ -1963,9 +1964,14 @@ matches."
            ((derived-mode-p 'org-mode)
             (let* ((element (org-element-at-point))
                    (name (org-element-property :name element))
+                   (context (org-element-context element))
                    (heading (org-element-lineage element '(headline inlinetask) t))
                    (custom-id (org-entry-get heading "CUSTOM_ID")))
               (cond
+               ((org-element-type-p context 'target)
+                (list (org-element-property :value context)
+                      (org-element-property :value context)
+                      (org-element-begin context)))
                (name
                 (list name
                       name
@@ -2059,7 +2065,8 @@ This command is designed for interactive use.  From Elisp, you can
 also use `org-link-preview-region'."
   (interactive (cons current-prefix-arg
                      (when (use-region-p)
-                       (list (region-beginning) (region-end)))))
+                       (list (region-beginning) (region-end))))
+               org-mode)
   (let* ((include-linked
           (cond
            ((member arg '(nil (4) (16)) ) nil)
@@ -2143,7 +2150,7 @@ also use `org-link-preview-region'."
 ;;;###autoload
 (defun org-link-preview-refresh ()
   "Assure display of link previews in buffer and refresh them."
-  (interactive)
+  (interactive nil org-mode)
   (org-link-preview-region nil t (point-min) (point-max)))
 
 (defun org-link-preview-region (&optional include-linked refresh beg end)
@@ -2176,7 +2183,7 @@ only if necessary.
 
 BEG and END define the considered part.  They default to the
 buffer boundaries with possible narrowing."
-  (interactive "P")
+  (interactive "P" org-mode)
   (when refresh (org-link-preview-clear beg end))
   (org-with-point-at (or beg (point-min))
     (let ((case-fold-search t)
@@ -2257,7 +2264,8 @@ Previews are generated from the specs in
 
 (defun org-link-preview-clear (&optional beg end)
   "Clear link previews in region BEG to END."
-  (interactive (and (use-region-p) (list (region-beginning) (region-end))))
+  (interactive (and (use-region-p) (list (region-beginning) (region-end)))
+               org-mode)
   (let* ((beg (or beg (point-min)))
          (end (or end (point-max)))
          (overlays (overlays-in beg end)))
@@ -2460,7 +2468,7 @@ PATH is the command to execute, as a string."
   "Move forward to the next link.
 If the link is in hidden text, expose it.  When SEARCH-BACKWARD
 is non-nil, move backward."
-  (interactive)
+  (interactive nil org-mode)
   (let ((pos (point))
 	(search-fun (if search-backward #'re-search-backward
 		      #'re-search-forward)))
@@ -2502,13 +2510,13 @@ is non-nil, move backward."
 (defun org-previous-link ()
   "Move backward to the previous link.
 If the link is in hidden text, expose it."
-  (interactive)
+  (interactive nil org-mode)
   (org-next-link t))
 
 ;;;###autoload
 (defun org-toggle-link-display ()
   "Toggle the literal or descriptive display of links in current buffer."
-  (interactive)
+  (interactive nil org-mode)
   (setq org-link-descriptive (not org-link-descriptive))
   (org-restart-font-lock))
 
@@ -2624,7 +2632,10 @@ NAME."
 	  (setq link
 		(format-time-string
                  (org-time-stamp-format)
-		 (org-encode-time 0 0 0 (nth 1 cd) (nth 0 cd) (nth 2 cd))))
+                 (org-encode-time 0 0 0
+                                  (calendar-extract-day cd)
+                                  (calendar-extract-month cd)
+                                  (calendar-extract-year cd))))
 	  (org-link-store-props :type "calendar" :date cd)))
 
        ;; Image mode
@@ -2656,24 +2667,10 @@ NAME."
        ;; buffers
        ((and (buffer-file-name (buffer-base-buffer)) (derived-mode-p 'org-mode))
 	(org-with-limited-levels
-	 (cond
-	  ;; Store a link using the target at point
-	  ((org-in-regexp "[^<]<<\\([^<>]+\\)>>[^>]" 1)
-	   (setq link
-		 (concat "file:"
-			 (abbreviate-file-name
-			  (buffer-file-name (buffer-base-buffer)))
-			 "::" (match-string 1))
-                 ;; Target may be shortened when link is inserted.
-                 ;; Avoid [[target][file:~/org/test.org::target]]
-                 ;; links.  Maybe the case of identical target and
-                 ;; description should be handled by `org-insert-link'.
-                 desc nil))
-          (t
 	   ;; Just link to current headline.
            (let ((here (org-link--file-link-to-here)))
              (setq link (car here))
-             (setq desc (cdr here)))))))
+             (setq desc (cdr here)))))
 
        ;; Buffer linked to file, but not an org-mode buffer.
        ((buffer-file-name (buffer-base-buffer))
@@ -2780,7 +2777,7 @@ docstring.  Otherwise, if `org-link-make-description-function' is
 non-nil, this function will be called with the link target, and
 the result will be the default link description.  When called
 non-interactively, don't allow editing the default description."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let* ((wcf (current-window-configuration))
 	 (origbuf (current-buffer))
 	 (region (when (org-region-active-p)
@@ -2910,7 +2907,7 @@ When a universal prefix, do not delete the links from `org-stored-links'.
 When `ARG' is a number, insert the last N link(s).
 `PRE' and `POST' are optional arguments to define a string to
 prepend or to append."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((org-link-keep-stored-after-insertion (equal arg '(4)))
 	(links (copy-sequence org-stored-links))
 	(pr (or pre "- "))
@@ -2930,7 +2927,7 @@ prepend or to append."
 ;;;###autoload
 (defun org-insert-last-stored-link (arg)
   "Insert the last link stored in `org-stored-links'."
-  (interactive "p")
+  (interactive "p" org-mode)
   (org-insert-all-links arg "" "\n"))
 
 ;;;###autoload
@@ -2978,7 +2975,7 @@ INHIBIT-MODIFY is passed to `looking-at'."
 (defun org-update-radio-target-regexp ()
   "Find all radio targets in this file and update the regular expression.
 Also refresh fontification if needed."
-  (interactive)
+  (interactive nil org-mode)
   (let ((old-regexp org-target-link-regexp)
 	;; Some languages, e.g., Chinese, do not use spaces to
         ;; separate words.  Also allow surrounding radio targets with

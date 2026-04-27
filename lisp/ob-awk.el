@@ -76,15 +76,15 @@ This function is called by `org-babel-execute-src-block'."
 		      tmp))))
          (cmd (mapconcat #'identity
 			 (append
-			  (list org-babel-awk-command
-				"-f" code-file cmd-line)
+                          (list org-babel-awk-command cmd-line
+                                "-f" (org-babel-process-file-name code-file))
 			  (mapcar (lambda (pair)
 				    (format "-v %s='%s'"
 					    (car pair)
 					    (org-babel-awk-var-to-awk
 					     (cdr pair))))
 				  (org-babel--get-vars params))
-			  (list in-file))
+			  (list (and in-file (org-babel-process-file-name in-file))))
 			 " ")))
     (org-babel-reassemble-table
      (let ((results

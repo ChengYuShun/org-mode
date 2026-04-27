@@ -183,7 +183,7 @@ Drawer's name is located in match group 1.")
 (defconst org-element-dynamic-block-open-re
   (rx line-start (0+ (any ?\s ?\t))
       "#+BEGIN:" (0+ (any ?\s ?\t))
-      (group (1+ word))
+      (group (1+ (not space)))
       (opt
        (1+ (any ?\s ?\t))
        (group (1+ nonl))))
@@ -193,7 +193,7 @@ Parameters are in match group 2.")
 
 (defconst org-element-dynamic-block-open-re-nogroup
   (rx line-start (0+ (any ?\s ?\t))
-      "#+BEGIN:" (0+ (any ?\s ?\t)) word)
+      "#+BEGIN:" (0+ (any ?\s ?\t)) (not space))
   "Regexp matching the opening line of a dynamic block.")
 
 (defconst org-element-headline-re
@@ -4489,21 +4489,21 @@ Assume point is at the beginning of the timestamp."
 	;; Parse date-start.
 	(unless diaryp
 	  (let ((date (org-parse-time-string date-start t)))
-	    (setq year-start (nth 5 date)
-		  month-start (nth 4 date)
-		  day-start (nth 3 date)
-		  hour-start (nth 2 date)
-		  minute-start (nth 1 date))))
+	    (setq year-start (decoded-time-year date)
+		  month-start (decoded-time-month date)
+		  day-start (decoded-time-day date)
+		  hour-start (decoded-time-hour date)
+		  minute-start (decoded-time-minute date))))
 	;; Compute date-end.  It can be provided directly in timestamp,
 	;; or extracted from time range.  Otherwise, it defaults to the
 	;; same values as date-start.
 	(unless diaryp
 	  (let ((date (and date-end (org-parse-time-string date-end t))))
-	    (setq year-end (or (nth 5 date) year-start)
-		  month-end (or (nth 4 date) month-start)
-		  day-end (or (nth 3 date) day-start)
-		  hour-end (or (nth 2 date) (car time-range) hour-start)
-		  minute-end (or (nth 1 date) (cdr time-range) minute-start))))
+	    (setq year-end (or (decoded-time-year date) year-start)
+		  month-end (or (decoded-time-month date) month-start)
+		  day-end (or (decoded-time-day date) day-start)
+		  hour-end (or (decoded-time-hour date) (car time-range) hour-start)
+		  minute-end (or (decoded-time-minute date) (cdr time-range) minute-start))))
         ;; Diary timestamp with time.
         (when (and diaryp
                    (string-match "\\([012]?[0-9]\\):\\([0-5][0-9]\\)\\(-\\([012]?[0-9]\\):\\([0-5][0-9]\\)\\)?" date-start))
@@ -5548,7 +5548,7 @@ DATA is a parse tree, an element, an object or a secondary string
 to interpret.  Return Org syntax as a string."
   (letrec ((fun
 	    (lambda (data parent)
-	      (let* ((type (org-element-type data))
+	      (let* ((type (org-element-type data 'allow-anonymous))
 		     ;; Find interpreter for current object or
 		     ;; element.  If it doesn't exist (e.g. this is
 		     ;; a pseudo object or element), return contents,
@@ -6571,7 +6571,11 @@ The buffer is: %s\n Current command: %S\n Backtrace:\n%S"
                     ;; unused.
                     (setf (org-element--request-end next) (org-element--request-end request)))
 	          (setq org-element--cache-sync-requests
-		        (cdr org-element--cache-sync-requests)))))
+		        (cdr org-element--cache-sync-requests))
+                  (org-element--cache-log-message
+                   "org-element-cache: Finished process. The cache size is %S. The remaining sync requests: %S"
+                   org-element--cache-size
+                   (let ((print-level 2)) (prin1-to-string org-element--cache-sync-requests))))))
 	    ;; If more requests are awaiting, set idle timer accordingly.
 	    ;; Otherwise, reset keys.
 	    (if org-element--cache-sync-requests
@@ -6954,11 +6958,7 @@ If this warning appears regularly, please report the warning text to Org mode ma
 			       (avl-tree--node-right node)
 			     (pop stack)))))))
         ;; We reached end of tree: synchronization complete.
-        t))
-    (org-element--cache-log-message
-     "org-element-cache: Finished process. The cache size is %S. The remaining sync requests: %S"
-     org-element--cache-size
-     (let ((print-level 2)) (prin1-to-string org-element--cache-sync-requests)))))
+        t))))
 
 (defun org-element--headline-parent-deferred (headline)
   "Parse parent for HEADLINE."
@@ -7850,7 +7850,7 @@ When optional argument ALL is non-nil, reset cache in all Org
 buffers.
 When optional argument NO-PERSISTENCE is non-nil, do not try to update
 the cache persistence in the buffer."
-  (interactive "P")
+  (interactive "P" org-mode)
   (dolist (buffer (if all (buffer-list) (list (current-buffer))))
     (org-with-base-buffer buffer
       (when (and org-element-use-cache (derived-mode-p 'org-mode))
@@ -7874,6 +7874,7 @@ the cache persistence in the buffer."
              'org-element--headline-cache
              (current-buffer)
              :inherit `((elisp org-element--cache) (version ,org-element-cache-version)))))
+        (org-element--cache-log-message "Resetting cache in %s" (current-buffer))
         (setq-local org-element--cache-change-tic (buffer-chars-modified-tick))
         (setq-local org-element--cache-last-buffer-size (buffer-size))
         (setq-local org-element--cache-gapless nil)
@@ -8545,14 +8546,21 @@ This function may modify the match data."
                         (condition-case-unless-debug err
                             (org-element--parse-to epom)
                           (error
-                           (org-element--cache-warn
-                            "Org parser error in %s::%S. Resetting.\n The error was: %S\n Backtrace:\n%S\n Please report this to Org mode mailing list (M-x org-submit-bug-report)."
-                            (buffer-name (current-buffer))
-                            epom
-                            err
-                            (when (and (fboundp 'backtrace-get-frames)
-                                       (fboundp 'backtrace-to-string))
-                              (backtrace-to-string (backtrace-get-frames 'backtrace))))
+                           ;; I am not sure if this is needed, but
+                           ;; I see in one report that the cache
+                           ;; is not being reset, so warning somehow
+                           ;; changing current buffer is the only
+                           ;; explanation I get. It does not hurt
+                           ;; anyway.
+                           (save-current-buffer
+                             (org-element--cache-warn
+                              "Org parser error in %s::%S. Resetting.\n The error was: %S\n Backtrace:\n%S\n Please report this to Org mode mailing list (M-x org-submit-bug-report)."
+                              (buffer-name (current-buffer))
+                              epom
+                              err
+                              (when (and (fboundp 'backtrace-get-frames)
+                                         (fboundp 'backtrace-to-string))
+                                (backtrace-to-string (backtrace-get-frames 'backtrace)))))
                            (org-element-cache-reset)
                            (org-element--parse-to epom)))))
         (when (and (org-element--cache-active-p)

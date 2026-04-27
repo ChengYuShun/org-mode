@@ -82,7 +82,16 @@ Version mismatch is commonly encountered in the following situations:
    It is recommended to set `load-path' as early in the config as
    possible.
 
-3. New Org version is loaded using straight.el package manager and
+3. New Org version is loaded while an old Org version is partially
+   loaded during compilation or M-x package-upgrade.  This usually
+   should not happen (at least, a number of attemps have been made
+   to avoid this problem in package.el), but sometimes it does anyway.
+
+   You can manually delete Org installation from ~/.emacs.d/elpa/ and
+   try installing again, possibly from emacs -Q without any
+   configuration loaded.
+
+4. New Org version is loaded using straight.el package manager and
    other package depending on Org is loaded before straight triggers
    loading of the newer Org version.
 
@@ -95,7 +104,7 @@ Version mismatch is commonly encountered in the following situations:
    sufficient if the corresponding `use-package' statement is
    deferring the loading.
 
-4. A new Org version is synchronized with Emacs git repository and
+5. A new Org version is synchronized with Emacs git repository and
    stale .elc files are still left from the previous build.
 
    It is recommended to remove .elc files from lisp/org directory and
@@ -1607,6 +1616,8 @@ preferably the latest version."
         (_ (error "`org-encode-time' may be called with 1, 6, or 9 arguments but %d given"
                   (length time)))))))
 
+(declare-function make-decoded-time "time-date" (&rest args))
+
 (defun org-parse-time-string (s &optional nodefault)
   "Parse Org time string S.
 
@@ -1620,17 +1631,17 @@ Note that the first match for YYYY-MM-DD will be used (e.g.,
 This should be a lot faster than the `parse-time-string'."
   (unless (string-match org-ts-regexp0 s)
     (error "Not an Org time string: %s" s))
-  (list 0
-	(cond ((match-beginning 8) (string-to-number (match-string 8 s)))
-	      (nodefault nil)
-	      (t 0))
-	(cond ((match-beginning 7) (string-to-number (match-string 7 s)))
-	      (nodefault nil)
-	      (t 0))
-	(string-to-number (match-string 4 s))
-	(string-to-number (match-string 3 s))
-	(string-to-number (match-string 2 s))
-	nil -1 nil))
+  (make-decoded-time
+   :second 0
+   :minute (cond ((match-beginning 8) (string-to-number (match-string 8 s)))
+                 (nodefault nil)
+                 (t 0))
+   :hour (cond ((match-beginning 7) (string-to-number (match-string 7 s)))
+               (nodefault nil)
+               (t 0))
+   :day (string-to-number (match-string 4 s))
+   :month (string-to-number (match-string 3 s))
+   :year (string-to-number (match-string 2 s))))
 
 (defun org-matcher-time (s)
   "Interpret a time comparison value S as a floating point time.

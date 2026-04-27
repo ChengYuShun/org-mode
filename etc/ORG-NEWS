@@ -30,21 +30,170 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 The "Tags and Priorities" section of the global context menu is split
 into a "Tags" section and a "Priorities" section.
 
+*** ~org-babel-tangle-single-block~ may return multiple target files
+
+When called with non-nil ONLY-THIS-BLOCK,
+~org-babel-tangle-single-block~ can now return multiple target file
+entries if a source block tangles to more than one file.
+
+Previously, the returned list always contained exactly one element.
+The return value structure is unchanged, but callers should no longer
+assume that the outer list has length one, which means ~(car
+(org-babel-tangle-single-block ...))~ is not guaranteed to return
+the correct ~(FILE . ...)~ cons.
+
 ** New features
 
 # We list the most important features, and the features that may
 # require user action to be used.
+
+*** Link targets can be used as search option in =id:= links
+
+When storing an =id:= link to target, the target will now be used as a
+search option. This mirrors what happens with =file:= links.
+You need to set ~org-id-link-to-org-use-id~ to make Org store =id:=
+link by default.
+
+See also ~org-id-link-use-context~ and ~org-link-context-for-files~.
+
+For example, link to =<<target>>=
+
+: * Heading
+: :PROPERTIES:
+: :ID: foo
+: :END:
+: Some text with <<target>>.
+
+will be stored as
+: [[id:foo::target][target]]
 
 *** New actions in the ~org-mouse~ priority menus
 
 Priorities can now be increased, decreased, set to the default, and
 set interactively from the priority context menus.
 
+*** ob-tangle.el now supports tangling to multiple targets
+
+Source blocks can now be tangled to multiple target files using
+the ~:tangle~ header argument.  The following forms are now supported:
+
+- =:tangle "file1.el"= (existing behavior)
+- =:tangle '("file1.el" "file2.el")= (new: list of files)
+- =:tangle (get-tangle-targets)= (new: function returning paths)
+- =:tangle 'tangle-targets= (new: variable returning paths)
+
+Additionally, the new ~:tangle-directory~ header argument specifies
+base directories for relative tangle paths:
+
+- =:tangle-directory "/tmp"= (single directory)
+- =:tangle-directory '("/tmp/a" "/tmp/b")= (multiple directories)
+- =:tangle-directory (get-tangle-dirs)= (function returning directories)
+- =:tangle-directory 'tangle-dirs= (variable returning directories)
+
+When both ~:tangle-directory~ and multiple ~:tangle~ files are specified,
+the block is tangled to all combinations of directories and files.
+
+Example:
+#+begin_example
+,#+begin_src emacs-lisp :tangle '("config.el" "backup.el") :tangle-directory '("~/.config" "/backup")
+(message "Tangling to multiple targets specified by :tangle and :tangle-directory")
+,#+end_src
+#+end_example
+
+This tangles the block to four files:
+- ~/.config/config.el
+- ~/.config/backup.el
+- /backup/config.el
+- /backup/backup.el
+
+*** iCalendar export blocks and keywords
+
+The iCalendar exporter now allows using export blocks and keywords
+to insert literal text into the exported document. For example:
+
+#+begin_src org
+  ,* An event
+  :PROPERTIES:
+  :ID:       abc123
+  :END:
+  <2026-03-12 Thu>
+
+  ,#+ICALENDAR: CONTACT:Jim Dolittle\, ABC Industries\, +1-919-555-1234
+
+  ,#+begin_export icalendar
+  ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=TENTATIVE;CN=Henry
+   Cabot:mailto:hcabot@example.com
+  ATTENDEE;ROLE=REQ-PARTICIPANT;DELEGATED-FROM="mailto:bob@
+   example.com";PARTSTAT=ACCEPTED;CN=Jane Doe:mailto:jdoe@
+   example.com
+  ,#+end_export
+#+end_src
+
+Note that text from export blocks and keywords is inserted literally
+into the exported iCalendar without any syntax checking.  When
+icalendar-mode.el (from Emacs 31) is available, text in icalendar
+export blocks will have syntax highlighting.
+
+A current limitation is that export blocks and keywords are only
+implemented for events and todos, and not yet for calendar-wide
+properties.
+
 ** New and changed options
 
 # Changes dealing with changing default values of customizations,
 # adding new customizations, or changing the interpretation of the
 # existing customizations.
+
+*** ~org-support-shift-select~ can now make shift-cursor selection work on timestamps
+
+Previously, when ~org-support-shift-select~ was set to ~always~,
+shift-cursor still triggered Org mode editing commands on timestamps.
+(As the docstring states, "it is too good to give up").
+Now, you can set ~org-support-shift-select~ to ~everywhere~ to make
+shift-selection work on timestamps as well, fully respecting
+~shift-select-mode~.
+
+The old value of ~always~ has been renamed to ~except-timestamps~ to
+avoid confusion.  The old value is still supported, but undocumented.
+We encourage users who explicitly set ~org-support-shift-select~ to
+~always~ in their configuration to use ~except-timestamps~ instead.
+
+*** New custom variable ~org-latex-default-example-environment~
+
+You can set the LaTeX environment used in ~example~ blocks with this
+variable.
+
+*** Square brackets around LATEX_CLASS_OPTIONS are now optional.
+
+#+BEGIN_SRC org
+,#+LATEX_CLASS_OPTIONS: [a4paper,12pt]
+#+END_SRC
+can be also written as:
+#+BEGIN_SRC org
+,#+LATEX_CLASS_OPTIONS: a4paper,12pt
+#+END_SRC
+
+*** Updated custom variable ~org-babel-update-intermediate~
+
+The variable is now a custom variable, and it can take a new value:
+~cached~. In that case, only the intermediate blocks with =:cache yes=
+header argument will be updated. This allows for the cache feature to
+still work when a block is evaluated indirectly to resolve a reference
+in another block.
+
+*** ox-html: When able, prevent code block line numbers from being included in copy/paste actions
+
+Previously, HTML export of code blocks that included line numbers
+would prepend the numbers to the same html element as the line of code
+(wrapped in a ~<span>~).  Therefore, if you highlighted the line in a
+browser to copy/paste the code block, the line numbers were also
+highlighted and copied.
+
+Now, the line number is still prepended and wrapped in a ~<span>~ in
+addition to being added to a data attribute, ~data-linenr~, on that
+~<span>~.  The default CSS has been modified so that you can now
+highlight and copy/paste multiple lines from a code block without
+having the line numbers included.
 
 ** New functions and changes in function arguments
 
@@ -59,12 +208,33 @@ cookie =[N%]=.
 
 ** Miscellaneous
 
+*** Attaching files, drag-and-drop, and ~yank-media~ will query about existing files
+
+Previously, ~org-attach~, drag-and-drop for files, and ~yank-media~
+either erred (when using ~cp~ attach/save method) or silently
+overwrote existing attachments/stored files (~mv~ method).  Now,
+an interactive yes/no query is displayed before attempting to store
+the files.
+
+*** =ox-latex=: ~#+BEGIN_EXAMPLE~ now checks for ~:options~ in ~#+ATTR_LATEX:~
+
+You can now pass options to the environment you choose for the
+~#+BEGIN_EXAMPLE~ environments.
+
 *** The percent cookie is now non-zero when any sub-task is complete
 
 With a large number of tasks (N > 100) the percent cookie previously
 showed =0%= when a non-zero amount have been completed, e.g. 1/101.
 Those cases now show =1%= instead.  The same is true for the checkbox
 status summary type =X%= when defining columns for column view.
+
+*** ~org-babel-tangle-use-relative-file-links~ is ignored during tangling when =:tangle= specifies multiple targets
+
+Previously, when ~org-babel-tangle-use-relative-file-links~ was
+non-nil, Org Babel attempted to generate relative commented links in
+tangled files.  This behavior no longer applies when =:tangle=
+specifies multiple targets; in that case, absolute links are always
+used and the variable is ignored.
 
 * Version 9.8
 ** Important announcements and breaking changes
@@ -1297,7 +1467,7 @@ This is no longer the case. ~display-buffer-alist~ is fully obeyed.
 
 ~org-switch-to-buffer-other-window~ and ~org-no-popups~ are now deprecated.
 
-*** Asynchronous code evaluatation in ~ob-shell~
+*** Asynchronous code evaluation in ~ob-shell~
 
 Running shell blocks with the ~:session~ header freezes Emacs until
 execution completes.  The new ~:async~ header allows users to continue

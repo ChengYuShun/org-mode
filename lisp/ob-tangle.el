@@ -42,6 +42,7 @@
 (declare-function org-before-first-heading-p "org" ())
 (declare-function org-element-lineage "org-element-ast" (datum &optional types with-self))
 (declare-function org-element-begin "org-element" (node))
+(declare-function org-element-end "org-element" (node))
 (declare-function org-element-at-point "org-element" (&optional pom cached-only))
 (declare-function org-element-type-p "org-element-ast" (node types))
 (declare-function org-heading-components "org" ())
@@ -69,11 +70,15 @@ then the name of the language is used."
 	  (cons
 	   (string "Language name")
 	   (string "File Extension")))
-  :safe t)
+  :safe #'listp)
 
 (defcustom org-babel-tangle-use-relative-file-links t
-  "Use relative path names in links from tangled source back the Org file."
+  "Use relative path names in links from tangled source back the Org file.
+
+Note that relative links are not used when a code block is tangled into
+multiple target files."
   :group 'org-babel-tangle
+  :package-version '(Org . "10.0")
   :type 'boolean)
 
 (defcustom org-babel-post-tangle-hook nil
@@ -247,7 +252,7 @@ Optional argument TARGET-FILE can be used to specify a default
 export file for all source blocks.  Optional argument LANG-RE can
 be used to limit the exported source code blocks by languages
 matching a regular expression."
-  (interactive "P")
+  (interactive "P" org-mode)
   (run-hooks 'org-babel-pre-tangle-hook)
   ;; Possibly Restrict the buffer to the current code block
   (save-restriction
@@ -490,7 +495,6 @@ source code blocks by languages matching a regular expression.
 Optional argument TANGLE-FILE can be used to limit the collected
 code blocks by target file."
   (let ((counter 0)
-        (buffer-fn (buffer-file-name (buffer-base-buffer)))
         last-heading-pos blocks)
     (org-babel-map-src-blocks (buffer-file-name)
       (let ((current-heading-pos
@@ -504,26 +508,22 @@ code blocks by target file."
 	  (setq last-heading-pos current-heading-pos)))
       (unless (or (org-in-commented-heading-p)
 		  (org-in-archived-heading-p))
-	(let* ((info (org-babel-get-src-block-info 'no-eval))
-	       (src-lang (nth 0 info))
-	       (src-tfile (cdr (assq :tangle (nth 2 info)))))
-	  (unless (or (string= src-tfile "no")
-                      ;; src block without lang
-                      (and (not src-lang) (string= src-tfile "yes"))
-		      (and tangle-file (not (equal tangle-file src-tfile)))
-                      ;; lang-re but either no lang or lang doesn't match
-		      (and lang-re
-                           (or (not src-lang)
-                               (not (string-match-p lang-re src-lang)))))
-	    ;; Add the spec for this block to blocks under its tangled
-	    ;; file name.
-	    (let* ((block (org-babel-tangle-single-block counter))
-                   (src-tfile (cdr (assq :tangle (nth 4 block))))
-		   (file-name (org-babel-effective-tangled-filename
-                               buffer-fn src-lang src-tfile))
-		   (by-fn (assoc file-name blocks)))
-	      (if by-fn (setcdr by-fn (cons (cons src-lang block) (cdr by-fn)))
-		(push (cons file-name (list (cons src-lang block))) blocks)))))))
+        (dolist (block (org-babel-tangle-single-block counter t))
+          (let ((src-file (car block))
+                (src-lang (caadr block)))
+            (unless (or (not src-file)
+                        ;; src block without lang
+                        (and (not src-lang) src-file)
+                        (and tangle-file (not (equal tangle-file src-file)))
+                        ;; lang-re but either no lang or lang doesn't match
+                        (and lang-re
+                             (or (not src-lang)
+                                 (not (string-match-p lang-re src-lang)))))
+              (setq blocks
+                    (mapcar (lambda (group)
+                              (cons (car group)
+                                    (apply #'append (mapcar #'cdr (cdr group)))))
+                            (seq-group-by #'car (push block blocks)))))))))
     ;; Ensure blocks are in the correct order.
     (mapcar (lambda (b) (cons (car b) (nreverse (cdr b))))
 	    (nreverse blocks))))
@@ -540,6 +540,7 @@ The PARAMS are the 3rd element of the info for the same src block."
                         (match-string 1 l))))
         (when bare
           (if (and org-babel-tangle-use-relative-file-links
+                   (stringp (cdr (assq :tangle params)))
                    (string-match org-link-types-re bare)
                    (string= (match-string 1 bare) "file"))
               (concat "file:"
@@ -549,6 +550,41 @@ The PARAMS are the 3rd element of the info for the same src block."
             bare))))))
 
 (defvar org-outline-regexp) ; defined in lisp/org.el
+
+(defun org-babel-tangle--compute-targets (buffer-fn info)
+  "Compute the list of target file paths for tangling a source block.
+
+BUFFER-FN is the absolute file name of the source buffer.  INFO is the
+source block information, as returned by `org-babel-get-src-block-info'."
+  (let* ((params         (nth 2 info))
+         (lang           (nth 0 info))
+         (tangle-dir-raw (cdr (assq :tangle-directory params)))
+         (tangle-targets (cdr (assq :tangle params)))
+         (tangle-dirs    (ensure-list tangle-dir-raw))
+         (tangle-files
+          (cond
+           ((and (stringp tangle-targets) (string= tangle-targets "yes"))
+            ;; Default to buffer name if :tangle yes
+            (list (file-name-nondirectory
+                   (org-babel-effective-tangled-filename buffer-fn lang tangle-targets))))
+           ((and (stringp tangle-targets) (string= tangle-targets "no")) nil)
+           (t (ensure-list tangle-targets)))))
+
+    (when tangle-files
+      (setq tangle-files
+            (cl-loop for file in tangle-files append
+                     (if (file-name-absolute-p file)
+                         (list file) ;; absolute paths stay as is
+                       (if tangle-dirs
+                           (mapcar (lambda (dir) (expand-file-name file dir)) tangle-dirs)
+                         (list file))))))
+
+    ;; Normalize final paths
+    (cl-remove-duplicates
+     (mapcar (lambda (file)
+               (org-babel-effective-tangled-filename buffer-fn lang file))
+             tangle-files))))
+
 (defun org-babel-tangle-single-block (block-counter &optional only-this-block)
   "Collect the tangled source for current block.
 Return the list of block attributes needed by
@@ -616,7 +652,6 @@ non-nil, return the full association list to be used by
 			 (match-end 0)
 		       (point-min))))
 	      (point)))))
-         (src-tfile (cdr (assq :tangle params)))
 	 (result
 	  (list start-line
 		(if org-babel-tangle-use-relative-file-links
@@ -625,13 +660,14 @@ non-nil, return the full association list to be used by
 		link
 		source-name
 		params
-		(if (org-src-preserve-indentation-p) (org-trim body t)
-		  (org-trim (org-remove-indentation body)))
+		(if (org-src-preserve-indentation-p) body
+		  (org-remove-indentation body))
 		comment)))
     (if only-this-block
-        (let* ((file-name (org-babel-effective-tangled-filename
-                           file src-lang src-tfile)))
-          (list (cons file-name (list (cons src-lang result)))))
+        (let* ((file-names (org-babel-tangle--compute-targets file info)))
+          (mapcar (lambda (file-name)
+                    (cons file-name (list (cons src-lang result))))
+                  file-names))
       result)))
 
 (defun org-babel-tangle-comment-links (&optional info)
@@ -720,8 +756,12 @@ of the current buffer."
       (forward-line 1)
       ;; Try to preserve location of point within the source code in
       ;; tangled code file.
-      (let ((offset (- mid body-start)))
-	(when (> end (+ offset (point)))
+      (let ((offset (- mid body-start))
+            (block-ends-here (org-with-point-at (org-element-end (org-element-at-point))
+                               (skip-chars-backward " \t\n\r")
+                               (forward-line 0)
+                               (point))))
+        (when (> block-ends-here (+ offset (point)))
 	  (forward-char offset)))
       (setq target-char (point)))
     (org-src-switch-to-buffer target-buffer t)

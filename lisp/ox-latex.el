@@ -799,6 +799,13 @@ default we use here encompasses both."
   :group 'org-export-latex
   :type 'string)
 
+(defcustom org-latex-default-example-environment "verbatim"
+  "Default environment used in example blocks."
+  :group 'org-export-latex
+  :package-version '(Org . "10.0")
+  :type 'string
+  :safe #'stringp)
+
 ;;;; Tables
 
 (defcustom org-latex-default-table-environment "tabular"
@@ -1092,7 +1099,8 @@ following syntax:
   :type '(repeat
 	  (list
 	   (string :tag "Listings option name ")
-	   (string :tag "Listings option value"))))
+	   (string :tag "Listings option value")))
+  :safe #'listp)
 
 (defcustom org-latex-minted-langs
   '((emacs-lisp "common-lisp")
@@ -1455,7 +1463,7 @@ A better approach is to use a compiler suit such as `latexmk'."
   :package-version '(Org . "9.0"))
 
 (defcustom org-latex-pdf-process
-  (if (executable-find "latexmk")
+  (if (and (executable-find "latexmk") (executable-find "perl"))
       '("latexmk -f -pdf -%latex -interaction=nonstopmode -output-directory=%o %f")
     '("%latex -interaction nonstopmode -output-directory %o %f"
       "%latex -interaction nonstopmode -output-directory %o %f"
@@ -2010,6 +2018,19 @@ The default behaviour is to typeset with the Roman font family."
 
 
 ;;; Template
+(defun org-latex--mk-options (str)
+  "Make STR be enclosed in [ ] or return an empty string if nil or empty.
+
+If STR is nil or an empty string, return STR.
+If STR is a traditional LATEX_CLASS_OPTIONS enclosed in [ ], return it as is.
+If the square brackets are missing, return STR enclosed in square brackets."
+  (if (or (not str) (length= str 0)) str
+    (save-match-data  ; just in case it is used in a search/replace context
+      (let ((str (concat "[" str "]"))) ; make sure it is enclosed in []
+        (replace-regexp-in-string  ; remove excess [ at the beginning
+         "\\`\\[+" "["
+         (replace-regexp-in-string ; remove excess ] at the end
+          "]+\\'" "]" str))))))
 
 ;;;###autoload
 (defun org-latex-make-preamble (info &optional template snippet?)
@@ -2023,7 +2044,7 @@ specified in `org-latex-default-packages-alist' or
   (let* ((class (plist-get info :latex-class))
 	 (class-template
 	  (or template
-	      (let* ((class-options (plist-get info :latex-class-options))
+	      (let* ((class-options (org-latex--mk-options (plist-get info :latex-class-options)))
 		     (header (nth 1 (assoc class (plist-get info :latex-classes)))))
 		(and (stringp header)
 	             (mapconcat #'org-element-normalize-string
@@ -2226,11 +2247,14 @@ information."
   (when (org-string-nw-p (org-element-property :value example-block))
     (let ((environment (or (org-export-read-attribute
 			    :attr_latex example-block :environment)
-			   "verbatim")))
+                           org-latex-default-example-environment))
+          (options (or (org-export-read-attribute
+                        :attr_latex example-block :options)
+                       "")))
       (org-latex--wrap-label
        example-block
-       (format "\\begin{%s}\n%s\\end{%s}"
-	       environment
+       (format "\\begin{%s}%s\n%s\\end{%s}"
+	       environment options
 	       (org-export-format-code-default example-block info)
 	       environment)
        info))))
@@ -2746,6 +2770,17 @@ contextual information."
 					'latex)))))))
 	      "\\relax ")
 	     (t " "))
+            ;; In lists like
+            ;; - tag ::
+            ;;   1. foo
+            ;;   2. bar
+            ;; the inner list will go right after "tag", on the same line.
+            ;; Avoid such scenario, except when the very first child is
+            ;; paragraph.
+            (unless (org-element-type-p
+                     (car (org-element-contents item))
+                     'paragraph)
+              "\\leavevmode\\par")
 	    (and contents (org-trim contents)))))
 
 
@@ -4419,7 +4454,7 @@ file-local settings.
 Export is done in a buffer named \"*Org LATEX Export*\", which
 will be displayed when `org-export-show-temporary-export-buffer'
 is non-nil."
-  (interactive)
+  (interactive nil org-mode)
   (defvar TeX-parse-self) ;; defined in tex.el
   (let (;; FIXME: Working around LaTeX-mode being broken in non-file buffers.
         ;; To be removed once we drop Emacs 30 and earlier, where the problem
@@ -4469,7 +4504,7 @@ between \"\\begin{document}\" and \"\\end{document}\".
 EXT-PLIST, when provided, is a property list with external
 parameters overriding Org default settings, but still inferior to
 file-local settings."
-  (interactive)
+  (interactive nil org-mode)
   (let ((outfile (org-export-output-file-name ".tex" subtreep)))
     (org-export-to-file 'latex outfile
       async subtreep visible-only body-only ext-plist)))
@@ -4503,7 +4538,7 @@ parameters overriding Org default settings, but still inferior to
 file-local settings.
 
 Return PDF file's name."
-  (interactive)
+  (interactive nil org-mode)
   (let ((outfile (org-export-output-file-name ".tex" subtreep)))
     (org-export-to-file 'latex outfile
       async subtreep visible-only body-only ext-plist

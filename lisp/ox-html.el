@@ -441,7 +441,13 @@ This affects IDs that are determined from the ID property.")
   #org-div-home-and-up
    { text-align: right; font-size: 70%; white-space: nowrap; }
   textarea { overflow-x: auto; }
-  .linenr { font-size: smaller }
+  .linenr {
+    font-size: smaller;
+    @supports (content: attr(data-linenr)) {
+      visibility: hidden;
+      &::before { content: attr(data-linenr); visibility: visible; }
+    }
+  }
   .code-highlighted { background-color: #ffff00; }
   .org-info-js_info-navigation { border-style: none; }
   #org-info-js_console-label
@@ -457,7 +463,7 @@ customize `org-html-head-include-default-style'."
   :group 'org-export-html
   :package-version '(Org . "9.8")
   :type 'string
-  :safe t)
+  :safe #'stringp)
 
 
 ;;; User Configuration Variables
@@ -1177,7 +1183,7 @@ components."
   :type '(cons string string)
   :group 'org-export-html
   :package-version '(Org . "9.8")
-  :safe t)
+  :safe #'consp)
 
 ;;;; Template :: Mathjax
 
@@ -1569,7 +1575,7 @@ or for publication projects using the :html-head property."
   :package-version '(Org . "9.8")
   :type '(choice (string :tag "Literal text to insert")
                  (function :tag "Function evaluating to a string"))
-  :safe t)
+  :safe #'stringp)
 ;;;###autoload
 (put 'org-html-head 'safe-local-variable 'stringp)
 
@@ -1584,7 +1590,7 @@ a string."
   :package-version '(Org . "9.8")
   :type '(choice (string :tag "Literal text to insert")
                  (function :tag "Function evaluating to a string"))
-  :safe t)
+  :safe #'stringp)
 ;;;###autoload
 (put 'org-html-head-extra 'safe-local-variable 'stringp)
 
@@ -2433,11 +2439,17 @@ is the language used for CODE, as a string, or nil."
 			  (forward-char 1))))
 		    (org-src-mode)
 		    (set-buffer-modified-p nil)
-		    ;; Htmlize region.
-		    (let ((org-html-htmlize-output-type output-type)
-			  (org-html-htmlize-font-prefix font-prefix))
-		      (org-html-htmlize-region-for-paste
-		       (point-min) (point-max))))))
+                    ;; htmlize itself triggers re-fontification.
+                    ;; We do additional font manipulation, so
+                    ;; prevent font-lock from undoing our changes by
+                    ;; preventing `font-lock-mode' from re-fontifying
+                    ;; the buffer.
+                    (let ((font-lock-ensure-function #'ignore))
+		      ;; Htmlize region.
+		      (let ((org-html-htmlize-output-type output-type)
+			    (org-html-htmlize-font-prefix font-prefix))
+		        (org-html-htmlize-region-for-paste
+		         (point-min) (point-max)))))))
 	  ;; Strip any enclosing <pre></pre> tags.
 	  (let* ((beg (and (string-match "\\`<pre[^>]*>\n?" code) (match-end 0)))
 		 (end (and beg (string-match "</pre>\\'" code))))
@@ -2467,8 +2479,8 @@ wrapped in code elements."
 	     (concat
 	      ;; Add line number, if needed.
 	      (when num-start
-		(format "<span class=\"linenr\">%s</span>"
-			(format num-fmt line-num)))
+                (let ((ln (format num-fmt line-num)))
+		  (format "<span data-linenr=\"%s\" class=\"linenr\">%s</span>" ln ln)))
 	      ;; Transcoded src line.
 	      (if wrap-lines
 		  (format "<code%s>%s</code>"
@@ -3103,7 +3115,8 @@ INFO is a plist containing export properties."
 	      (concat (file-name-as-directory org-preview-latex-image-directory)
 		      (file-name-sans-extension
 		       (file-name-nondirectory bfn)))
-	      cache-dir (file-name-directory (plist-get info :output-file)))
+	      cache-dir (file-name-directory
+                         (or (plist-get info :output-file) bfn)))
 	;; Re-create LaTeX environment from original buffer in
 	;; temporary buffer so that dvipng/imagemagick can properly
 	;; turn the fragment into an image.
@@ -4068,7 +4081,7 @@ file-local settings.
 Export is done in a buffer named \"*Org HTML Export*\", which
 will be displayed when `org-export-show-temporary-export-buffer'
 is non-nil."
-  (interactive)
+  (interactive nil org-mode)
   (org-export-to-buffer 'html "*Org HTML Export*"
     async subtreep visible-only body-only ext-plist
     (lambda () (set-auto-mode t))))
@@ -4113,7 +4126,7 @@ parameters overriding Org default settings, but still inferior to
 file-local settings.
 
 Return output file's name."
-  (interactive)
+  (interactive nil org-mode)
   (let* ((extension (concat
 		     (when (> (length org-html-extension) 0) ".")
 		     (or (plist-get ext-plist :html-extension)

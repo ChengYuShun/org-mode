@@ -17,6 +17,10 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+
+;;; Commentary:
+;;
+
 ;;; Code:
 
 (eval-when-compile (require 'cl-lib))
@@ -211,7 +215,7 @@ Return interpreted string."
              'dummy
              `(:foo
                ,(org-element-deferred-create
-                 nil (lambda (el)
+                 nil (lambda (_el)
                      (org-element-deferred-create
                       nil (lambda (_) 1))))))))
     (should (eq 1 (org-element-property :foo el)))))
@@ -1017,7 +1021,7 @@ CLOCK: [2023-10-13 Fri 14:40]--[2023-10-13 Fri 14:51] =>  0:11"
 ;;;; Citation
 
 (ert-deftest test-org-element/citation-parser ()
-  "Test `citation' parser"
+  "Test `citation' parser."
   ;; Parse citations.  They must contain at least a bare key.
   (should
    (eq 'citation
@@ -1331,6 +1335,13 @@ CLOCK: [2023-10-13 Fri 14:40]--[2023-10-13 Fri 14:51] =>  0:11"
    (org-test-with-temp-text
        "#+BEGIN: myblock :param1 val1 :param2 val2\nText\n#+END:"
      (org-element-map (org-element-parse-buffer) 'dynamic-block 'identity)))
+  (org-test-with-temp-text
+      "#+BEGIN: block-with-dashes :param1 val1 :param2 val2\nText\n#+END:"
+    (org-element-map (org-element-parse-buffer) 'dynamic-block
+      (lambda (block)
+        (should
+         (equal "block-with-dashes"
+                (org-element-property :block-name block))))))
   ;; Ignore case.
   (should
    (org-test-with-temp-text
@@ -5292,7 +5303,7 @@ Text
                   (org-test-with-temp-text "* H1\nP1\n<point>*H2\n"
                     (let ((org-element-use-cache t))
                       (org-element-cache-map #'ignore :granularity 'element)
-                      (backward-delete-char 1)
+                      (delete-char 1)
                       (org-element-type (org-element-at-point))))))
   (org-test-with-temp-text "Paragraph.\n #<point> comment"
     (let ((org-element-use-cache t))

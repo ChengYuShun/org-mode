@@ -259,7 +259,7 @@ the buffer."
 (defun org-timer-item (&optional arg)
   "Insert a description-type item with the current timer value.
 Prefix argument ARG is passed to `org-timer'."
-  (interactive "P")
+  (interactive "P" org-mode)
   (let ((itemp (org-in-item-p)) (pos (point)))
     (cond
      ;; In a timer list, insert with `org-list-insert-item',
@@ -425,7 +425,8 @@ using three \\[universal-argument] prefix arguments."
 	    org-timer-default-timer))
 	 (effort-minutes
           (cond ((derived-mode-p 'org-agenda-mode)
-                 (floor (org-get-at-bol 'effort-minutes)))
+                 (when-let* ((effort (org-get-at-bol 'effort-minutes)))
+                   (floor effort)))
                 ((derived-mode-p 'org-mode)
                  (let ((effort (org-entry-get nil org-effort-property)))
 	           (when (org-string-nw-p effort)

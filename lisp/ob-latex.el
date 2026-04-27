@@ -84,7 +84,7 @@ It takes 1 argument which is the parameters of the source block."
   :group 'org-babel
   :package-version '(Org . "9.8")
   :type 'function
-  :safe nil)
+  :risky t)
 
 (defcustom org-babel-latex-begin-env
   (lambda (_)
@@ -133,7 +133,7 @@ exporting the literal LaTeX source."
 	 "you need to install the programs: latex and dvipng."
 	 :image-input-type "dvi" :image-output-type "png"
 	 :image-size-adjust (1.0 . 1.0) :latex-compiler
-         ,(if (executable-find "latexmk")
+         ,(if (and (executable-find "latexmk") (executable-find "perl"))
               '("latexmk -f -pdf -latex -interaction=nonstopmode -output-directory=%o %f")
             '("latex -interaction nonstopmode -output-directory %o %f"
               "latex -interaction nonstopmode -output-directory %o %f"
@@ -150,7 +150,7 @@ The following process symbols are recognized:
   :package-version '(Org . "9.8")
   :type '(alist :tag "LaTeX to image backends"
 		:value-type (plist))
-  :safe nil)
+  :risky t)
 
 (defun org-babel-expand-body:latex (body params)
   "Expand BODY according to PARAMS, return the expanded body."

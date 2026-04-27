@@ -183,7 +183,7 @@ MongoDB & MySQL & 2 \\\\
       "\\href{https://orgmode.org/worg/images/orgmode/org-mode-unicorn.svg}{\\includegraphics[width=.9\\linewidth]{/wallpaper.png}}"))))
 
 (ert-deftest test-ox-latex/num-t ()
-  "Test toc treatment for fixed num:t"
+  "Test toc treatment for fixed num:t."
   (org-test-with-exported-text
    'latex
    "#+TITLE: num: fix
@@ -241,7 +241,7 @@ is suppressed
 \\end{document}"))))
 
 (ert-deftest test-ox-latex/new-toc-as-org ()
-  "test toc treatment with `org-latex-toc-include-unnumbered' set to `t'"
+  "Test toc treatment with `org-latex-toc-include-unnumbered' set to t."
   (let ((org-latex-toc-include-unnumbered t))
     (org-test-with-exported-text 'latex
         "#+TITLE: num: fix
@@ -357,7 +357,7 @@ Fake test document
       (should (search-forward "\\begin{document}" nil t)))))
 
 (ert-deftest test-ox-latex/latex-class-pre ()
-  "Test #+LATEX_CLASS_PRE"
+  "Test #+LATEX_CLASS_PRE."
   (org-test-with-exported-text 'latex
                                "#+LATEX_CLASS_PRE: \\PassOptionsToPackage{dvipsnames}{xcolor}
 #+TITLE: Test prepending LaTeX before the preamble
@@ -373,7 +373,65 @@ Fake test document
       ;; And after this
       (should (search-forward "\\begin{document}" nil t))))
 
-(ert-deftest test-ox-latex/math-in-alt-title ()
+(ert-deftest test-ox-latex/latex-class-options1 ()
+  "Test #+LATEX_CLASS_OPTIONS with square brackets."
+  (org-test-with-exported-text 'latex
+                               "#+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: [a4paper,12pt]
+#+TITLE: Confirm legagy class options
+
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should (search-forward "\\documentclass[a4paper,12pt]{article}" nil t))))
+
+(ert-deftest test-ox-latex/latex-class-options2 ()
+  "Test #+LATEX_CLASS_OPTIONS without square brackets."
+  (org-test-with-exported-text 'latex
+                               "#+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: a4paper,12pt
+#+TITLE: Confirm class options without square brackets
+
+* Test
+
+Fake test document
+"
+      (goto-char (point-min))
+      (should (search-forward "\\documentclass[a4paper,12pt]{article}" nil t))))
+
+(ert-deftest test-ox-latex/latex-class-options3 ()
+  "Don't overwrite class options in class template"
+  (let ((org-latex-classes '(("my-letter" "\\documentclass[a4paper,12pt]{letter}"))))
+      (org-test-with-exported-text
+       'latex
+       "#+LATEX_CLASS: my-letter
+
+Fake test letter
+"
+      (goto-char (point-min))
+      (should (search-forward "\\documentclass[a4paper,12pt]{letter}" nil t)))))
+
+
+(ert-deftest test-ox-latex/latex-default-example-with-options ()
+  "Test #+ATTR_LATEX: :options with custom environment."
+  (let ((org-latex-default-example-environment "Verbatim"))
+    (org-test-with-exported-text
+     'latex
+     "#+TITLE: Test adding options to EXAMPLE
+
+* Test
+
+#+ATTR_LATEX: :options [frame=double]
+#+BEGIN_EXAMPLE
+How do you do?
+#+END_EXAMPLE
+"
+      (goto-char (point-min))
+      (should (search-forward "\\begin{document}\n" nil t))
+      (should (search-forward "\\begin{Verbatim}[frame=double]\n" nil t)))))
+ (ert-deftest test-ox-latex/math-in-alt-title ()
   "Test math wrapping in ALT_TITLE properties."
   (org-test-with-exported-text
       'latex

@@ -31,6 +31,7 @@
 
 (ert-deftest test-org-attach/dir ()
   "Test `org-attach-get' specifications."
+  ;; Make sure example files will be visited inside Emacs.
   (let ((org-file-apps '((t . emacs))))
     (should (equal "Text in fileA\n"
 		   (org-test-in-example-file org-test-attachments-file
@@ -127,7 +128,7 @@
 	     (delete-window)
 	     (switch-to-buffer org-buffer)
 	     (cl-assert (eq 'org-mode major-mode)))
-	   (beginning-of-buffer)
+           (goto-char (point-min))
 	   (search-forward "* foo")
 					; expectation.  tag ATTACH has been appended.
 	   (cl-reduce (lambda (x y) (or x y))
@@ -160,7 +161,7 @@
 	    (delete-window)
 	    (switch-to-buffer org-buffer))
 	  (cl-assert (eq 'org-mode major-mode))
-	  (beginning-of-buffer)
+          (goto-char (point-min))
 	  (search-forward "* foo")
 	  (and (file-exists-p (concat (org-attach-dir) "/"
 				      (file-name-nondirectory a-filename)))
