@@ -1846,14 +1846,17 @@ For example, you can use this to extract the `diary-remind-message' from
 
 (defcustom org-agenda-timerange-leaders '("" "(%d/%d): ")
   "Text preceding timerange entries in the agenda view.
-This is a list with two strings.  The first applies when the range
-is entirely on one day.  The second applies if the range spans several days.
-The strings may have two \"%d\" format specifiers which will be filled
-with the sequence number of the days, and the total number of days in the
-range, respectively."
+This is a list with two strings or functions that return strings.  The
+first applies when the range is entirely on one day.  The second applies
+if the range spans several days.  The strings may have two \"%d\" format
+specifiers which will be filled with the sequence number of the days,
+and the total number of days in the range, respectively."
   :group 'org-agenda-line-format
+  :package-version '(Org . "10.0")
   :type '(list
-	  (string :tag "Deadline today   ")
+	  (choice :tag "Deadline today   "
+                  (string :tag "Format string")
+		  (function))
 	  (choice :tag "Deadline relative"
 		  (string :tag "Format string")
 		  (function))))
@@ -1962,7 +1965,7 @@ controlled by `org-use-tag-inheritance'.  In other agenda types,
 agenda entries.  Still, you may want the agenda to be aware of
 the inherited tags anyway, e.g. for later tag filtering.
 
-Allowed value are `todo', `search' and `agenda'.
+Allowed values are `todo', `search' and `agenda'.
 
 This variable has no effect if `org-agenda-show-inherited-tags'
 is set to `always'.  In that case, the agenda is aware of those
@@ -5272,7 +5275,8 @@ a list of TODO keywords, or a state symbol `todo' or `done' or
 		     (error "Invalid TODO class or type: %S" args))
 		    (`(,_ ,(pred (member "*"))) org-todo-keywords-1)
 		    (`(,_ ,todo-list) todo-list))
-		  'words))))
+		  t)
+                 "\\(?: \\|$\\)")))
     (pcase args
       (`(todo . ,_)
        (let (case-fold-search) (re-search-forward todo-re end t)))
@@ -6871,10 +6875,16 @@ scheduled items with an hour specification like [h]h:mm."
 		    (setq txt (org-agenda-format-item
                                (concat
                                 (when inactive? org-agenda-inactive-leader)
-			        (format
-			         (nth (if (= start-day end-day) 0 1)
-				      org-agenda-timerange-leaders)
-			         (1+ (- agenda-today start-day)) (1+ (- end-day start-day))))
+                                (format
+                                 (let ((format
+                                        (if (= start-day end-day)
+                                            (car org-agenda-timerange-leaders)
+                                          (cadr org-agenda-timerange-leaders))))
+                                   (if (functionp format)
+                                       (funcall format)
+                                     format))
+                                 (1+ (- agenda-today start-day))
+                                 (1+ (- end-day start-day))))
 			       (org-add-props head nil
                                  'effort effort
                                  'effort-minutes effort-minutes)
@@ -7881,7 +7891,7 @@ in the agenda."
   "Rebuild possibly ALL agenda view(s) in the current buffer."
   (interactive "P" org-agenda-mode)
   (defvar org-agenda-tag-filter-while-redo) ;FIXME: Where is this var used?
-  (let* ((p (or (and (looking-at "\\'") (1- (point))) (point)))
+  (let* ((p (or (and (/= 1 (point)) (looking-at "\\'") (1- (point))) (point)))
 	 (cpa (unless (eq all t) current-prefix-arg))
 	 (org-agenda-doing-sticky-redo org-agenda-sticky)
 	 (org-agenda-sticky nil)
@@ -9729,8 +9739,10 @@ the dedicated frame."
 	 (pos (marker-position marker)))
     (with-current-buffer buffer
       (save-excursion
-	(goto-char pos)
-	(org-tree-to-indirect-buffer arg))))
+	(save-restriction
+	  (widen)
+	  (goto-char pos)
+	  (org-tree-to-indirect-buffer arg)))))
   (setq org-agenda-last-indirect-buffer org-last-indirect-buffer))
 
 (defvar org-last-heading-marker (make-marker)
@@ -9783,7 +9795,8 @@ the same tree node, and the headline of the tree node in the Org file."
 	 (when (and org-agenda-headline-snapshot-before-repeat
 		    (not (equal org-agenda-headline-snapshot-before-repeat
 			      newhead))
-		    todayp)
+		    (or (not (org-agenda-check-type nil 'agenda))
+                        todayp))
 	   (setq newhead org-agenda-headline-snapshot-before-repeat
 		 just-one t))
 	 (save-excursion
@@ -10301,21 +10314,35 @@ ARG is passed through to `org-deadline'."
   (org-agenda-unmark-clocking-task))
 
 (defun org-agenda-clock-goto ()
-  "Jump to the currently clocked in task within the agenda.
-If the currently clocked in task is not listed in the agenda
-buffer, display it in another window."
+  "Jump to the currently clocked-in task from the agenda.
+If there are multiple entries in the agenda view, jump to the one
+closest to the point.  Otherwise, if the task is not listed in the
+agenda buffer or filtered out, display it in another window."
   (interactive nil org-agenda-mode)
-  (let (pos)
-    (mapc (lambda (o)
-	    (when (eq (overlay-get o 'type) 'org-agenda-clocking)
-	      (setq pos (overlay-start o))))
-	  (overlays-in (point-min) (point-max)))
-    (cond (pos (goto-char pos))
-	  ;; If the currently clocked entry is not in the agenda
-	  ;; buffer, we visit it in another window:
-	  ((bound-and-true-p org-clock-current-task)
-	   (switch-to-buffer-other-window (org-clock-goto)))
-	  (t (message "No running clock, use `C-c C-x C-j' to jump to the most recent one")))))
+  (let* ((pt (point))
+         (column (current-column))
+         (visible-clock-positions
+          (sort
+           (delete-dups
+            (remq nil
+                  (mapcar (lambda (o)
+                            (when-let* (((eq (overlay-get o 'type)
+                                             'org-agenda-clocking))
+                                        (start (overlay-start o))
+                                        ((not (invisible-p start))))
+                              start))
+                          (overlays-in (point-min) (point-max)))))
+           (lambda (p1 p2) (< (count-lines p1 pt t)
+                         (count-lines p2 pt t)))))
+         (closest (car visible-clock-positions)))
+    (cond (closest
+           (goto-char closest)
+           (move-to-column column))
+          ;; If the currently clocked entry is not in the agenda
+          ;; buffer, we visit it in another window:
+          ((bound-and-true-p org-clock-current-task)
+           (switch-to-buffer-other-window (org-clock-goto)))
+          (t (message "No running clock, use `C-c C-x C-j' to jump to the most recent one")))))
 
 (defun org-agenda-diary-entry-in-org-file ()
   "Make a diary entry in the file `org-agenda-diary-file'."

@@ -37,6 +37,8 @@
 (require 'org-fold)
 
 (require 'calendar)
+(require 'map)
+(require 'seq)
 
 (defvar clean-buffer-list-kill-buffer-names)
 (defvar org-agenda-buffer-name)
@@ -279,6 +281,28 @@ filename in the link as an argument and returns the path."
   :package-version '(Org . "9.5")
   :safe #'symbolp)
 
+(defcustom org-link-default-file-link-description nil
+  "How the description of file links should be stored.
+The value of this variable is only respected when
+`org-store-link' cannot determine link description from the link
+context, i.e. in Dired or non-org-mode files.
+Valid values are:
+
+nil        No description will be created.
+filename   Description will be the filename of the link.
+file-path  Description will be the full filepath of the link.
+           Respects the value of `org-link-file-path-type'.
+
+Alternatively, the value can be a custom function that takes the path
+of the link as an argument and returns the description."
+  :group 'org-link
+  :type '(choice (const nil)
+                 (const filename)
+                 (const file-path)
+                 (function))
+  :package-version '(Org . "10.0")
+  :safe (lambda (x) (member x (list nil 'filename 'file-path))))
+
 (defcustom org-link-abbrev-alist nil
   "Alist of link abbreviations.
 The car of each element is a string, to be replaced at the start of a link.
@@ -485,7 +509,7 @@ single keystroke rather than having to type \"yes\"."
 A search string is added to the file name with \"::\" as separator
 and used to find the context when the link is activated by the command
 `org-open-at-point'.  When this option is t, the entire active region
-is be placed in the search string of the file link.  If set to a
+is placed in the search string of the file link.  If set to a
 positive integer N, only the first N lines of context are stored.
 
 Using a prefix argument to the command `org-store-link' \
@@ -745,6 +769,17 @@ exact and fuzzy text search.")
 (defconst org-link--forbidden-chars "]\t\n\r<>"
   "Characters forbidden within a link, as a string.")
 
+(defconst org-link--string-normalizers
+  (list (cons 'statistics-cookies #'org-link--remove-statistics-cookies)
+        (cons 'search-syntax #'org-link--remove-search-syntax)
+        (cons 'pipe-chars #'org-link--remove-pipe-chars)
+        (cons 'contiguous-spaces #'org-link--remove-contiguous-spaces)
+        (cons 'leading-and-trailing-spaces #'org-trim))
+  "Alist of functions used by `org-link-normalize-string'.
+Each symbol corresponds to a value that will be
+removed from a string.  Each value corresponds to
+a function that will remove said value.")
+
 (defvar org-link--history nil
   "History for inserted links.")
 
@@ -909,30 +944,61 @@ White spaces are not significant."
 			   "\n"))))
       context)))
 
+(defsubst org-link--remove-statistics-cookies (string)
+  "Remove statistics cookies from STRING."
+  (replace-regexp-in-string
+   ;; Statistics cookie regexp.
+   (rx (seq "[" (0+ digit) (or "%" (seq "/" (0+ digit))) "]"))
+   " " string))
+
+(defsubst org-link--remove-pipe-chars (string)
+  "Remove pipe chars from STRING."
+  (replace-regexp-in-string "|" " " string))
+
+(defsubst org-link--remove-search-syntax (string)
+  "Remove search syntax from STRING."
+  (while (cond ((and (string-prefix-p "(" string)
+                     (string-suffix-p ")" string))
+                (setq string (org-trim (substring string 1 -1))))
+               ((string-match "\\`[#*]+[ \t]*" string)
+                (setq string (substring string (match-end 0))))
+               (t nil)))
+  string)
+
+(defsubst org-link--remove-contiguous-spaces (string)
+  "Remove contiguous spaces from STRING."
+  (replace-regexp-in-string
+   (rx (one-or-more (any " \t")))
+   " "
+   string))
+
 (defun org-link--normalize-string (string &optional context)
   "Remove ignored contents from STRING string and return it.
-This function removes contiguous white spaces and statistics
-cookies.  When optional argument CONTEXT is non-nil, it assumes
-STRING is a context string, and also removes special search
-syntax around the string."
-  (let ((string
-	 (org-trim
-	  (replace-regexp-in-string
-	   (rx (one-or-more (any " \t")))
-	   " "
-	   (replace-regexp-in-string
-	    ;; Statistics cookie regexp.
-	    (rx (seq "[" (0+ digit) (or "%" (seq "/" (0+ digit))) "]"))
-	    " "
-	    string)))))
-    (when context
-      (while (cond ((and (string-prefix-p "(" string)
-			 (string-suffix-p ")" string))
-		    (setq string (org-trim (substring string 1 -1))))
-		   ((string-match "\\`[#*]+[ \t]*" string)
-		    (setq string (substring string (match-end 0))))
-		   (t nil))))
-    string))
+This function removes contiguous white spaces and statistics cookies.
+When optional argument CONTEXT is non-nil, it assumes STRING is a
+context string, and also removes special search syntax around the
+string."
+  (org-link-normalize-string string
+                             (if context
+                                 '(statistics-cookies search-syntax)
+                               '(statistics-cookies))))
+
+(cl-defun org-link-normalize-string (string &optional (ignored-contents '(statistics-cookies search-syntax)))
+  "Remove contiguous white spaces and IGNORED-CONTENTS from STRING.
+IGNORED-CONTENTS is a list of extra things to remove.  It can be any
+subset of (statistics-cookies search-syntax pipe-chars):
+- `statistics-cookies' are statistics cookie strings
+- `search-syntax' is # in #heading and enclosing () in (ref)
+- `pipe-chars' are | characters that may clash with table syntax."
+  (let* ((valid-symbols (seq-intersection ignored-contents (list 'statistics-cookies 'search-syntax 'pipe-chars)))
+         (values-to-remove (append valid-symbols (list 'contiguous-spaces 'leading-and-trailing-spaces)))
+         ;; We trim twice: before we run our string normalizers
+         ;; and after in order to remove any spaces that were introduced
+         ;; by the normalization process
+         (trimmed-string (org-trim string)))
+    (seq-reduce (lambda (str func) (funcall (map-elt org-link--string-normalizers func) str))
+                values-to-remove
+                trimmed-string)))
 
 (defun org-link--reveal-maybe (region _)
   "Reveal folded link in REGION when needed.
@@ -997,19 +1063,28 @@ Return t when a link has been stored in `org-link-store-props'."
     (push (list link desc) org-stored-links)
     (message "Link moved to front: %s" (or desc link)))))
 
+(defun org-link--file-link-description (path)
+  "Use PATH to create a description for file link.
+PATH will be transformed according to the value
+of `org-link-default-file-link-description'."
+  (pcase org-link-default-file-link-description
+    (`nil nil)
+    (`filename (file-name-nondirectory path))
+    (`file-path (org-link--normalize-filename path))
+    ((pred functionp) (funcall org-link-default-file-link-description path))
+    (_ (error "Invalid `org-link-default-file-link-description' value"))))
+
 (defun org-link--file-link-to-here ()
   "Return as (LINK . DESC) a file link with search string to here."
-  (let ((link (concat "file:"
-                      (abbreviate-file-name
-                       (buffer-file-name (buffer-base-buffer)))))
-        desc)
-    (when org-link-context-for-files
-      (pcase (org-link-precise-link-target)
-        (`nil nil)
-        (`(,search-string ,search-desc ,_position)
-         (setq link (format "%s::%s" link search-string))
-         (setq desc search-desc))))
-    (cons link desc)))
+  (let* ((path (buffer-file-name (buffer-base-buffer)))
+         (link (concat "file:" (abbreviate-file-name path)))
+         (context (and org-link-context-for-files (org-link-precise-link-target)))
+         (search-string (car context))
+         (search-desc (cadr context)))
+    (cond
+     ((and search-string search-desc) (cons (format "%s::%s" link search-string) search-desc))
+     (search-string (cons (format "%s::%s" link search-string) (org-link--file-link-description path)))
+     (t (cons link (org-link--file-link-description path))))))
 
 (defun org-link-preview--get-overlays (&optional beg end)
   "Return link preview overlays between BEG and END."
@@ -1736,6 +1811,32 @@ Optional argument ARG is passed to `org-open-file' when S is a
                  s (substring s (1- (org-element-end link)))))
     (link (org-link-open link arg))))
 
+(defun org-link--search-headlines (words &optional ignore-pipes)
+  "Search WORDS in headlines in Org mode buffers.
+WORDS is a list of strings.  Ignore COMMENT keyword, TODO keywords,
+priority cookies, statistics cookies and tags.  When IGNORE-PIPES is
+non-nil, also ignore pipe characters."
+  (let ((title-re
+	 (format "%s.*\\(?:%s[ \t]\\)?.*%s"
+		 org-outline-regexp-bol
+		 org-comment-string
+		 (regexp-opt words)))
+        (case-fold-search t))
+    (goto-char (point-min))
+    (catch :found
+      (while (re-search-forward title-re nil t)
+        (when-let* ((heading-content (org-get-heading t t t t))
+                    (normalize-string-args
+                     (if ignore-pipes
+                         (list 'statistics-cookies 'pipe-chars)
+                       (list 'statistics-cookies)))
+                    (heading-parts
+                     (split-string (org-link-normalize-string
+                                    heading-content normalize-string-args)))
+                    (match-found (equal words heading-parts)))
+	  (throw :found t)))
+      nil)))
+
 (defun org-link-search (s &optional avoid-pos stealth new-heading-container)
   "Search for a search string S in the accessible part of the buffer.
 
@@ -1835,25 +1936,15 @@ respects buffer narrowing."
 		     (forward-line 0)
 		     (throw :name-match t))))
 	       nil))))
-     ;; Regular text search.  Prefer headlines in Org mode buffers.
-     ;; Ignore COMMENT keyword, TODO keywords, priority cookies,
-     ;; statistics cookies and tags.
+     ;; Regular text search of headlines in Org mode buffers.
      ((and (derived-mode-p 'org-mode)
-	   (let ((title-re
-		  (format "%s.*\\(?:%s[ \t]\\)?.*%s"
-			  org-outline-regexp-bol
-			  org-comment-string
-			  (mapconcat #'regexp-quote words ".+"))))
-	     (goto-char (point-min))
-	     (catch :found
-	       (while (re-search-forward title-re nil t)
-		 (when (equal (mapcar #'upcase words)
-                              (mapcar #'upcase
-			              (split-string
-			               (org-link--normalize-string
-				        (org-get-heading t t t t)))))
-		   (throw :found t)))
-	       nil)))
+	   (org-link--search-headlines words))
+      (forward-line 0)
+      (setq type 'dedicated))
+     ;; Second attempt of regular text search of headlines in Org mode buffers
+     ;; This time we remove pipes from headlines
+     ((and (derived-mode-p 'org-mode)
+	   (org-link--search-headlines words 'ignore-pipes))
       (forward-line 0)
       (setq type 'dedicated))
      ;; Offer to create non-existent headline depending on
@@ -1914,7 +2005,7 @@ respects buffer narrowing."
       (org-fold-show-context 'link-search))
     type))
 
-(defun org-link-heading-search-string (&optional string)
+(defun org-link-heading-search-string (&optional string remove-pipe-chars)
   "Make search string for the current headline or STRING.
 
 Search string starts with an asterisk.  COMMENT keyword and
@@ -1923,10 +2014,31 @@ into a single one.
 
 When optional argument STRING is non-nil, assume it a headline,
 without any asterisk, TODO or COMMENT keyword, and without any
-priority cookie or tag."
-  (concat "*"
-	  (org-link--normalize-string
-	   (or string (org-get-heading t t t t)))))
+priority cookie or tag.
+
+When optional argument REMOVE-PIPE-CHARS is non-nil,
+remove pipe chars from string."
+  (let ((normalize-string-args
+         (if remove-pipe-chars
+             (list 'statistics-cookies 'pipe-chars)
+           (list 'statistics-cookies))))
+    (concat "*"
+	    (org-link-normalize-string
+	     (or string (org-get-heading t t t t))
+             normalize-string-args))))
+
+(defun org-link-create-headline-link-for-table (headline)
+  "Convert HEADLINE into a link for a clocktable.
+The link and the description will not contain contiguous
+white spaces, statistics cookies or pipe chars."
+  (let* ((file-name (buffer-file-name))
+         (description (org-link-normalize-string
+                       headline
+                       (list 'statistics-cookies 'pipe-chars)))
+         (link (if file-name
+                   (format "file:%s::%s" file-name (org-link-heading-search-string headline t))
+                 (org-link-heading-search-string headline t))))
+    (org-link-make-string link description)))
 
 (defun org-link-precise-link-target ()
   "Determine search string and description for storing a link.
@@ -2652,7 +2764,8 @@ NAME."
 			  (expand-file-name (dired-get-filename nil t)))
 		       ;; Otherwise, no file so use current directory.
 		       default-directory))
-	  (setq link (concat "file:" file))))
+	  (setq link (concat "file:" file)
+                desc (org-link--file-link-description file))))
 
        ;; Try `org-create-file-search-functions`.  If any are
        ;; successful, create a file link to the current buffer with

@@ -248,7 +248,7 @@ command (TAB, S-TAB or RET)."
 (defcustom org-table-exit-follow-field-mode-when-leaving-table t
   "Non-nil means automatically exit the follow mode.
 When nil, the follow mode will stay on and be active in any table
-the cursor enters.  Since the table follow filed mode messes with the
+the cursor enters.  Since the table follow field mode messes with the
 window configuration, it is not recommended to set this variable to nil,
 except maybe locally in a special file that has mostly tables with long
 fields."
@@ -3052,10 +3052,9 @@ existing formula for column %s"
 		          (org-table-message-once-per-second
 		           log-last-time
 		           "Re-applying formulas to full table...(line %d)" cnt)))
-	          (if (markerp org-last-recalc-line)
-		      (move-marker org-last-recalc-line (line-beginning-position))
-		    (setq org-last-recalc-line
-		          (copy-marker (line-beginning-position))))
+	          (setq org-last-recalc-line
+		        (org-move-marker
+			 org-last-recalc-line (line-beginning-position)))
 	          (dolist (entry eqlcol)
 		    (goto-char org-last-recalc-line)
 		    (org-table-goto-column
@@ -4954,9 +4953,8 @@ This function sets up the following dynamically scoped variables:
 			(push (list field line col)
 			      org-table-named-field-locations))))))))))
       ;; Reuse existing markers when possible.
-      (if (markerp org-table-current-begin-pos)
-	  (move-marker org-table-current-begin-pos (point))
-	(setq org-table-current-begin-pos (point-marker)))
+      (setq org-table-current-begin-pos
+	    (org-move-marker org-table-current-begin-pos))
       ;; Analyze the line types.
       (let ((l 0) hlines dlines types)
 	(while (looking-at "[ \t]*|\\(-\\)?")
@@ -5855,6 +5853,7 @@ This may be either a string or a function of two arguments:
 		 (princ "\n")))))
       (let ((org-inhibit-startup t)) (org-mode))
       (defvar org-export-before-processing-functions) ; ox.el
+      (defvar org-export-after-includes-functions) ; ox.el
       (defvar org-export-process-citations) ; ox.el
       (defvar org-export-expand-links) ; ox.el
       (defvar org-export-filter-parse-tree-functions) ; ox.el
@@ -5869,6 +5868,7 @@ This may be either a string or a function of two arguments:
       ;; We _do not_ disable `org-export-filter-parse-tree-functions'
       ;; (historically).
       (let ((org-export-before-processing-functions nil)
+            (org-export-after-includes-functions nil)
             (org-export-replace-macros nil)
             (org-export-use-babel nil)
             (org-export-before-parsing-functions nil)

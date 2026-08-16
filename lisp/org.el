@@ -2084,13 +2084,14 @@ current entry each time a todo state is changed."
 		(repeat (string :tag "DONE keyword")))
 	  (other :tag "No TODO statistics" nil)))
 
-(defcustom org-hierarchical-todo-statistics t
+(defcustom org-todo-children-only-statistics t
   "Non-nil means TODO statistics covers just direct children.
 When nil, all entries in the subtree are considered.
 This has only an effect if `org-provide-todo-statistics' is set.
 To set this to nil for only a single subtree, use a COOKIE_DATA
 property and include the word \"recursive\" into the value."
   :group 'org-todo
+  :package-version '(Org . "10.0")
   :type 'boolean)
 
 (defcustom org-after-todo-state-change-hook nil
@@ -2645,8 +2646,8 @@ will be preserved on export."
 (defun org-time-stamp-format (&optional with-time inactive custom)
   "Get timestamp format for a time string.
 
-The format is based on `org-timestamp-formats' (if CUSTOM is nil) or or
-`org-timestamp-custom-formats' (if CUSTOM if non-nil).
+The format is based on `org-timestamp-formats' (if CUSTOM is nil) or
+`org-timestamp-custom-formats' (if CUSTOM is non-nil).
 
 When optional argument WITH-TIME is non-nil, the timestamp will contain
 time.
@@ -5246,13 +5247,22 @@ The following commands are available:
   ;; source blocks).
   (setq-local parse-sexp-lookup-properties t)
   ;; Beginning/end of defun
-  (setq-local beginning-of-defun-function 'org-backward-element)
+  (setq-local beginning-of-defun-function
+              (lambda ()
+                (condition-case _
+                    (org-backward-element)
+                  ;; Already at the beginning.
+                  (user-error t))))
   (setq-local end-of-defun-function
 	      (lambda ()
-		(if (not (org-at-heading-p))
-		    (org-forward-element)
-		  (org-forward-element)
-		  (forward-char -1))))
+                (condition-case _
+		    (if (not (org-at-heading-p))
+		        (org-forward-element)
+		      (org-forward-element)
+		      (forward-char -1))
+                  ;; At the last element. Move to eob.
+                  (user-error
+                   (goto-char (point-max))))))
   ;; Next error for sparse trees
   (setq-local next-error-function 'org-occur-next-match)
   ;; Make commit log messages from Org documents easier.
@@ -5295,6 +5305,9 @@ The following commands are available:
   (when (boundp 'forward-thing-provider-alist)
     (setq-local forward-thing-provider-alist
                 (cons '(url . org-next-link)
+                      forward-thing-provider-alist))
+    (setq-local forward-thing-provider-alist
+                (cons '(sentence . org--forward-sentence-thing-at-point-provider)
                       forward-thing-provider-alist)))
   (when (boundp 'bounds-of-thing-at-point-provider-alist)
     (setq-local bounds-of-thing-at-point-provider-alist
@@ -5883,6 +5896,8 @@ by a #."
 	    (goto-char beg)
 	    (search-forward (or label "fn:"))
 	    (org-remove-flyspell-overlays-in beg (match-end 0))))
+        (when (null referencep) ; No flyspell inside [fn:X] definitions.
+          (org-remove-flyspell-overlays-in beg end))
         (add-face-text-property beg end 'org-footnote)
 	(add-text-properties beg end
 			     (list 'mouse-face 'highlight
@@ -6185,14 +6200,14 @@ needs to be inserted at a specific position in the font-lock sequence.")
 	  ;; Emphasis
           ;; `org-do-emphasis-faces' prepends faces
 	  (when org-fontify-emphasized-text '(org-do-emphasis-faces))
+	  ;; Description list items
+          '("\\(?:^[ \t]*[-+]\\|^[ \t]+[*]\\)[ \t]+\\(.*?[ \t]+::\\)\\([ \t]+\\|$\\)"
+	    1 'org-list-dt prepend)
 	  ;; Checkboxes
 	  `(,org-list-full-item-re 3 'org-checkbox prepend lax)
 	  (when (cdr (assq 'checkbox org-list-automatic-rules))
 	    '("\\[\\([0-9]*%\\)\\]\\|\\[\\([0-9]*\\)/\\([0-9]*\\)\\]"
 	      (0 (org-get-checkbox-statistics-face) prepend)))
-	  ;; Description list items
-          '("\\(?:^[ \t]*[-+]\\|^[ \t]+[*]\\)[ \t]+\\(.*?[ \t]+::\\)\\([ \t]+\\|$\\)"
-	    1 'org-list-dt prepend)
           ;; Inline export snippets
           '("\\(@@\\)\\([a-z-]+:\\).*?\\(@@\\)"
             (1 'font-lock-comment-face prepend)
@@ -6868,19 +6883,28 @@ This is a list with the following elements:
   "Edit the current headline.
 Set it to HEADING when provided."
   (interactive nil org-mode)
-  (org-with-wide-buffer
-   (org-back-to-heading t)
-   (let ((case-fold-search nil))
-     (when (looking-at org-complex-heading-regexp)
-       (let* ((old (match-string-no-properties 4))
-	      (new (save-match-data
-		     (org-trim (or heading (read-string "Edit: " old))))))
-	 (unless (equal old new)
-	   (if old (replace-match new t t nil 4)
-	     (goto-char (or (match-end 3) (match-end 2) (match-end 1)))
-	     (insert " " new))
-	   (when org-auto-align-tags (org-align-tags))
-	   (when (looking-at "[ \t]*$") (replace-match ""))))))))
+  (let ((beg (point-min))
+	(end (point-max)))
+    (org-with-wide-buffer
+     (org-back-to-heading t)
+     (let ((case-fold-search nil))
+       (when (looking-at org-complex-heading-regexp)
+	 (let* ((old (match-string-no-properties 4))
+		(new
+		 (save-match-data
+		   (org-trim
+		    (or heading
+			(save-restriction
+			  (when (and (<= beg (point))
+				     (<= (line-end-position) end))
+			    (narrow-to-region beg end))
+			  (read-string "Edit: " old)))))))
+	   (unless (equal old new)
+	     (if old (replace-match new t t nil 4)
+	       (goto-char (or (match-end 3) (match-end 2) (match-end 1)))
+	       (insert " " new))
+	     (when org-auto-align-tags (org-align-tags))
+	     (when (looking-at "[ \t]*$") (replace-match "")))))))))
 
 (defun org-insert-heading-after-current ()
   "Insert a new heading with same level as current, after current subtree."
@@ -7954,7 +7978,8 @@ If JUST-RETURN-STRING is non-nil, return a string, don't display a message."
   (interactive "P" org-mode)
   (let* (case-fold-search
 	 (bfn (buffer-file-name (buffer-base-buffer)))
-         (title-prop (when (eq file-or-title 'title) (org-get-title)))
+         (prefix (when (eq file-or-title 'title)
+                   (or (org-get-title) (file-name-nondirectory bfn))))
 	 (path (and (derived-mode-p 'org-mode) (org-get-outline-path)))
 	 res)
     (when current (setq path (append path
@@ -7966,10 +7991,7 @@ If JUST-RETURN-STRING is non-nil, return a string, don't display a message."
 	  (org-format-outline-path
 	   path
 	   (1- (frame-width))
-	   (and file-or-title bfn (concat (if (and (eq file-or-title 'title) title-prop)
-					      title-prop
-					    (file-name-nondirectory bfn))
-				 separator))
+	   prefix
 	   separator))
     (add-face-text-property 0 (length res)
 			    `(:height ,(face-attribute 'default :height))
@@ -8101,9 +8123,9 @@ function is being called interactively."
             what "region")
       (goto-char start))
      ((or (org-at-heading-p)
-          (ignore-errors (progn (org-back-to-heading) t)))
+          (ignore-errors (progn (org-back-to-heading (not interactive?)) t)))
       ;; we will sort the children of the current headline
-      (org-back-to-heading)
+      (org-back-to-heading (not interactive?))
       (setq start (point)
 	    end (progn (org-end-of-subtree t t)
 		       (or (bolp) (insert "\n"))
@@ -9056,6 +9078,12 @@ there is one, return it."
       (cons (org-element-begin context)
             (org-element-end context)))))
 
+(defun org--forward-sentence-thing-at-point-provider (&optional backward)
+  "`forward-thing' provider function."
+  (if backward
+      (org-backward-sentence)
+    (org-forward-sentence)))
+
 ;;; File search
 
 (defun org-do-occur (regexp &optional cleanup)
@@ -9577,6 +9605,7 @@ When foo is written as FOO, upcase the #+BEGIN/END as well."
 	  (goto-char region-end)
 	  ;; Ignore empty lines at the end of the region.
 	  (skip-chars-backward " \r\t\n")
+	  (unless (eolp) (insert "\n") (forward-line -1))
 	  (end-of-line))
 	(unless (bolp) (insert "\n"))
 	(indent-to column)
@@ -9903,7 +9932,8 @@ When called through Elisp, arg is also interpreted in the following way:
 	      (org-update-parent-todo-statistics))
 	    (when (bound-and-true-p org-clock-out-when-done)
 	      (org-clock-out-if-current))
-	    (run-hooks 'org-after-todo-state-change-hook)
+            (save-excursion
+	      (run-hooks 'org-after-todo-state-change-hook))
 	    (when (and arg (not (member org-state org-done-keywords)))
 	      (setq head (org-get-todo-sequence-head org-state)))
             (put-text-property (line-beginning-position)
@@ -10131,13 +10161,13 @@ respect narrowing."
 (defvar org-entry-property-inherited-from) ;; defined below
 (defun org-update-parent-todo-statistics ()
   "Update any statistics cookie in the parent of the current headline.
-When `org-hierarchical-todo-statistics' is nil, statistics will cover
+When `org-todo-children-only-statistics' is nil, statistics will cover
 the entire subtree and this will travel up the hierarchy and update
 statistics everywhere."
   (let* ((prop (save-excursion
                  (org-up-heading-safe)
 		 (org-entry-get nil "COOKIE_DATA" 'inherit)))
-	 (recursive (or (not org-hierarchical-todo-statistics)
+	 (recursive (or (not org-todo-children-only-statistics)
 			(and prop (string-match "\\<recursive\\>" prop))))
 	 (lim (or (and prop (marker-position org-entry-property-inherited-from))
 		  0))
@@ -10152,7 +10182,7 @@ statistics everywhere."
 	(setq ltoggle (funcall outline-level))
 	;; Three situations are to consider:
 
-	;; 1. if `org-hierarchical-todo-statistics' is nil, repeat up
+	;; 1. if `org-todo-children-only-statistics' is nil, repeat up
 	;;    to the top-level ancestor on the headline;
 
 	;; 2. If parent has "recursive" property, repeat up to the
@@ -10495,7 +10525,6 @@ This function is run automatically after each state change to a DONE state."
 	 (aa (assoc org-last-state org-todo-kwd-alist))
 	 (interpret (nth 1 aa))
 	 (head (nth 2 aa))
-	 (whata '(("h" . hour) ("d" . day) ("m" . month) ("y" . year)))
 	 (msg "Entry repeats: ")
 	 (org-log-done nil)
 	 (org-todo-log-states nil)
@@ -10539,76 +10568,112 @@ This function is run automatically after each state change to a DONE state."
       ;; a SCHEDULED timestamp without one is removed, as they are no
       ;; longer relevant.
       (save-excursion
-	(let ((scheduled (org-entry-get (point) "SCHEDULED")))
-	  (when (and scheduled (not (string-match-p org-repeat-re scheduled)))
-	    (org-remove-timestamp-with-keyword org-scheduled-string))))
+	(let* ((headline (org-element-lineage
+                          (org-element-at-point)
+                          (list 'headline 'inlinetask) t))
+               (scheduled (org-element-property
+                           :scheduled
+                           headline))
+               (repeater-unit (org-element-property
+                               :repeater-unit
+                               scheduled))
+               (repeater-value (org-element-property
+                                :repeater-value
+                                scheduled))
+               (repeater-type (org-element-property
+                               :repeater-type
+                               scheduled))
+               (has-valid-repeater (and repeater-unit
+                                        repeater-value
+                                        repeater-type)))
+	  (when (and scheduled (not has-valid-repeater))
+	    (org-remove-timestamp-with-keyword org-scheduled-string 'planning))))
       ;; Update every timestamp with a repeater in the entry.
       (let ((planning-re (regexp-opt
 			  (list org-scheduled-string org-deadline-string))))
 	(while (re-search-forward org-repeat-re end t)
-	  (let* ((ts (match-string 0))
+	  (let* ((timestamp (save-match-data
+                              (save-excursion
+                                (goto-char (match-beginning 0))
+                                (org-element-timestamp-parser))))
+                 (repeater-type (org-element-property
+                                 :repeater-type
+                                 timestamp))
+                 (repeater-unit (org-element-property
+                                 :repeater-unit
+                                 timestamp))
+                 (repeater-value (org-element-property
+                                  :repeater-value
+                                  timestamp))
+                 (has-start-time (and (org-element-property
+                                       :hour-start
+                                       timestamp)
+                                      (org-element-property
+                                       :minute-start
+                                       timestamp)))
+                 (time (org-timestamp-to-time timestamp))
+                 (time-in-seconds (float-time time))
 		 (type (if (not (org-at-planning-p)) "Plain:"
 			 (save-excursion
 			   (re-search-backward
 			    planning-re (line-beginning-position) t)
 			   (match-string 0)))))
 	    (when (and (org-at-timestamp-p 'agenda)
-		       (string-match "\\([.+]\\)?\\(\\+[0-9]+\\)\\([hdwmy]\\)" ts))
-	      (let ((n (string-to-number (match-string 2 ts)))
-		    (what (match-string 3 ts)))
-		(when (equal what "w") (setq n (* n 7) what "d"))
-		(when (and (equal what "h")
-			   (not (string-match-p "[0-9]\\{1,2\\}:[0-9]\\{2\\}"
-						ts)))
-		  (user-error
-		   "Cannot repeat in %d hour(s) because no hour has been set"
-		   n))
-		;; Preparation, see if we need to modify the start
-		;; date for the change.
-		(when (match-end 1)
-		  (let ((time (save-match-data (org-time-string-to-time ts)))
-			(repeater-type (match-string 1 ts)))
-		    (cond
-		     ((equal "." repeater-type)
-		      ;; Shift starting date to today, or now if
-		      ;; repeater is by hours.
-		      (if (equal what "h")
-			  (org-timestamp-change
-			   (floor (- (org-timestamp-to-now ts t)) 60) 'minute)
-			(org-timestamp-change
-			 (- (org-today) (time-to-days time)) 'day)))
-		     ((equal "+" repeater-type)
-		      (let ((nshiftmax 10)
-			    (nshift 0))
-			(while (or (= nshift 0)
-				   (if (equal what "h")
-				       (not (time-less-p nil time))
-				     (>= (org-today)
-					 (time-to-days time))))
-			  (when (= nshiftmax (cl-incf nshift))
-			    (or (y-or-n-p
-				 (format "%d repeater intervals were not \
+		       repeater-unit
+                       repeater-value)
+	      (when (equal repeater-unit `week)
+                (setq repeater-value (* repeater-value 7)
+                      repeater-unit 'day))
+              (print (list has-start-time (org-current-line-string)))
+	      (when (and (equal repeater-unit `hour)
+			 (not has-start-time))
+		(user-error
+		 "Cannot repeat in %d hour(s) because no hour has been set"
+		 repeater-value))
+	      ;; Preparation, see if we need to modify the start
+	      ;; date for the change.
+	      (cond
+	       ((equal `restart repeater-type)
+		;; Shift starting date to today, or now if
+		;; repeater is by hours.
+		(if (equal repeater-unit `hour)
+		    (org-timestamp-change
+		     (floor (- (- time-in-seconds (float-time))) 60) 'minute)
+		  (org-timestamp-change
+		   (- (org-today) (time-to-days time)) 'day)))
+	       ((equal `catch-up repeater-type)
+		(let ((nshiftmax 10)
+		      (nshift 0))
+		  (while (or (= nshift 0)
+			     (if (equal repeater-unit `hour)
+				 (not (time-less-p nil time))
+			       (>= (org-today)
+				   (time-to-days time))))
+		    (when (= nshiftmax (cl-incf nshift))
+		      (or (y-or-n-p
+			   (format "%d repeater intervals were not \
 enough to shift date past today.  Continue? "
-					 nshift))
-				(user-error "Abort")))
-			  (org-timestamp-change n (cdr (assoc what whata)))
-			  (org-in-regexp org-ts-regexp3)
-			  (setq ts (match-string 1))
-			  (setq time
-				(save-match-data
-				  (org-time-string-to-time ts)))))
-		      (org-timestamp-change (- n) (cdr (assoc what whata)))
-		      ;; Rematch, so that we have everything in place
-		      ;; for the real shift.
-		      (org-in-regexp org-ts-regexp3)
-		      (setq ts (match-string 1))
-		      (string-match "\\([.+]\\)?\\(\\+[0-9]+\\)\\([hdwmy]\\)"
-				    ts)))))
-		(save-excursion
-		  (org-timestamp-change n (cdr (assoc what whata)) nil t))
-		(setq msg
-		      (concat msg type " " org-last-changed-timestamp " ")))))))
-      (run-hooks 'org-todo-repeat-hook)
+				   nshift))
+			  (user-error "Abort")))
+		    (org-timestamp-change repeater-value repeater-unit)
+		    (org-in-regexp org-ts-regexp3)
+		    (setq timestamp (save-match-data
+                                      (save-excursion
+                                        (goto-char (match-beginning 0))
+                                        (org-element-timestamp-parser))))
+		    (setq time
+			  (save-match-data
+			    (org-timestamp-to-time timestamp)))))
+		(org-timestamp-change (- repeater-value) repeater-unit)
+		;; Rematch, so that we have everything in place
+		;; for the real shift.
+		(org-in-regexp org-ts-regexp3)))
+	      (save-excursion
+		(org-timestamp-change repeater-value repeater-unit nil t))
+	      (setq msg
+		    (concat msg type " " org-last-changed-timestamp " "))))))
+      (save-excursion
+        (run-hooks 'org-todo-repeat-hook))
       (setq org-log-post-message msg)
       (message msg))))
 
@@ -10672,8 +10737,8 @@ TYPE is either `deadline' or `scheduled'.  See `org-deadline' or
 		        "Entry was not scheduled"))
 	   (when (and old-date log)
 	     (org-add-log-setup (if deadline? 'deldeadline 'delschedule)
-			     nil old-date log))
-	   (org-remove-timestamp-with-keyword keyword)
+			        nil old-date log))
+	   (org-remove-timestamp-with-keyword keyword 'planning)
 	   (message (if deadline? "Entry no longer has a deadline."
 		      "Entry is no longer scheduled."))))
         (`(16)
@@ -10780,14 +10845,21 @@ nil."
     (when time
       (org-time-string-to-time time))))
 
-(defun org-remove-timestamp-with-keyword (keyword)
-  "Remove all time stamps with KEYWORD in the current entry."
+(defun org-remove-timestamp-with-keyword (keyword &optional planning)
+  "Remove all time stamps with KEYWORD in the current entry.
+When PLANNING is non-nil, only remove on planning line."
   (let ((re (concat "\\<" (regexp-quote keyword) " +<[^>\n]+>[ \t]*"))
 	beg)
     (save-excursion
       (org-back-to-heading t)
-      (setq beg (point))
-      (outline-next-heading)
+      (if planning
+          (progn
+            (forward-line)
+            (when (looking-at-p org-planning-line-re)
+              (setq beg (point))
+              (forward-line)))
+        (setq beg (point))
+        (outline-next-heading))
       (while (re-search-backward re beg t)
 	(replace-match "")
         (if (and (string-match "\\S-" (buffer-substring (line-beginning-position) (point)))
@@ -11056,6 +11128,21 @@ EXTRA is additional text that will be inserted into the notes buffer."
         org-log-setup t)
   (add-hook 'post-command-hook 'org-add-log-note 'append))
 
+(defun org--log-note-format-regexp (format)
+  "Return a regexp matching log note FORMAT."
+  (replace-regexp-in-string
+   " +" " +"
+   (org-replace-escapes
+    (regexp-quote format)
+    `(("%d" . ,org-ts-regexp-inactive)
+      ("%D" . ,org-ts-regexp)
+      ("%s" . "\\(?:\"\\S-+\"\\)?")
+      ("%S" . "\\(?:\"\\S-+\"\\)?")
+      ("%t" . ,org-ts-regexp-inactive)
+      ("%T" . ,org-ts-regexp)
+      ("%u" . ".*?")
+      ("%U" . ".*?")))))
+
 (defun org-skip-over-state-notes ()
   "Skip past the list of State notes in an entry.
 The point is assumed to be on a list of State notes, each matching
@@ -11067,18 +11154,8 @@ items are State notes."
 	   (prevs (org-list-prevs-alist struct))
 	   (regexp
 	    (concat "[ \t]*- +"
-		    (replace-regexp-in-string
-		     " +" " +"
-		     (org-replace-escapes
-		      (regexp-quote (cdr (assq 'state org-log-note-headings)))
-		      `(("%d" . ,org-ts-regexp-inactive)
-			("%D" . ,org-ts-regexp)
-			("%s" . "\\(?:\"\\S-+\"\\)?")
-			("%S" . "\\(?:\"\\S-+\"\\)?")
-			("%t" . ,org-ts-regexp-inactive)
-			("%T" . ,org-ts-regexp)
-			("%u" . ".*?")
-			("%U" . ".*?")))))))
+		    (org--log-note-format-regexp
+		     (cdr (assq 'state org-log-note-headings))))))
       (while (looking-at-p regexp)
 	(goto-char (or (org-list-get-next-item (point) struct prevs)
 		       (org-list-get-item-end (point) struct)))))))
@@ -14648,7 +14725,9 @@ user."
 	(setq ans (concat (substring ans 0 (match-beginning 7))
 			  (substring ans (match-end 7))))))
 
-    (setq tl (parse-time-string ans)
+    (setq tl (condition-case _
+                 (parse-time-string ans)
+               (error (parse-time-string "")))
 	  day (or (decoded-time-day tl) (decoded-time-day org-defdecode))
 	  month
 	  (cond ((decoded-time-month tl))
@@ -15720,16 +15799,17 @@ When SUPPRESS-TMP-DELAY is non-nil, suppress delays like
           (setq dm 1))
         (setq time
 	      (org-encode-time
-               (org-decoded-time-add
-                time0
-                (make-decoded-time
-                 (cl-ecase timestamp?
-                   (minute :minute)
-                   (hour :hour)
-                   (day :day)
-                   (month :month)
-                   (year :year))
-                 increment)))))
+               (if-let* ((unit
+                          (cl-case timestamp?
+                            (minute :minute)
+                            (hour :hour)
+                            (day :day)
+                            (month :month)
+                            (year :year))))
+                   (org-decoded-time-add
+                    time0
+                    (make-decoded-time unit increment))
+                 time0))))
       ;; Validation if we're modifying hour or minute fields
       (when (and with-hm
                  (memq timestamp? '(hour minute))
@@ -16064,7 +16144,8 @@ prefix, restrict available buffers to agenda files."
   (interactive "P")
   (let ((blist (org-buffer-list
 		(cond ((equal arg '(4))  'files)
-		      ((equal arg '(16)) 'agenda)))))
+		      ((equal arg '(16)) 'agenda))
+                t)))
     (pop-to-buffer-same-window
      (completing-read "Org buffer: "
 		      (mapcar #'list (mapcar #'buffer-name blist))
@@ -20918,7 +20999,7 @@ FORMAT is a format specifier to be passed to
 When optional argument END is non-nil, use end of date-range or
 time-range, if possible.
 
-When optional argument UTC is non-nil, time is be expressed as
+When optional argument UTC is non-nil, time is expressed as
 Universal Time."
   (format-time-string format (org-timestamp-to-time timestamp end)
 		      (and utc t)))
@@ -22189,7 +22270,9 @@ See `org-forward-paragraph'."
   (interactive nil org-mode)
   (save-restriction
     (widen)
-    (skip-chars-forward " \t\n")
+    (when (org-match-line "^[ \t]*$")
+      ;; We should not skip when point is at the end of non-empty line.
+      (skip-chars-forward " \t\n"))
     (cond
      ((eobp) nil)
      ;; When inside a folded part, move out of it.
