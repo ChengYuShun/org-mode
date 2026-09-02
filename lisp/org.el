@@ -125,14 +125,34 @@ sure that we are at the beginning of the line.")
   "Matches a headline, putting stars and text into groups.
 Stars are put in group 1 and the trimmed body in group 2.")
 
+(defconst org-priority-prefix "[#"
+  "Marker preceding value in the priority indicator e.g [# in [#A].")
+
+(defconst org-priority-suffix "]"
+  "Marker following value in the priority indicator e.g ] in [#A].")
+
 (defvar org-priority-value-regexp "[A-Z]\\|[0-9]\\|[1-5][0-9]\\|6[0-4]"
   "Regular expression matching valid priority values.
 The priority value must be a capital Latin
 alphabetic character, A through Z, or can be an integer value in the range 0
 through 64.")
 
+(defun org-make-priority-regexp (&optional inner-only)
+  "Generate a correct `org-priority-regexp' using `org-priority'
+variables. Useful after setting custom priority markers or value
+regexp.
+
+If INNER-ONLY is non-nil, return only the inner regular expression,
+e.g to store in `org-mouse-priority-regexp' instead."
+  (let ((inner (concat (regexp-quote org-priority-prefix)
+                       "\\(" org-priority-value-regexp "\\)"
+                       (regexp-quote org-priority-suffix))))
+    (if inner-only
+      inner
+      (concat ".*?\\(" inner " ?\\)"))))
+
 (defvar org-priority-regexp
-  (format ".*?\\(\\[#\\(%s\\)\\] ?\\)" org-priority-value-regexp)
+  (org-make-priority-regexp)
   "Regular expression matching the priority indicator.
 A priority indicator can be e.g. [#A] or [#1].
 The value of the priority cookie must be a capital Latin
@@ -2063,7 +2083,7 @@ are followed by a letter in parenthesis, like TODO(t)."
 
 (defcustom org-provide-todo-statistics t
   "Non-nil means update todo statistics after insert and toggle.
-ALL-HEADLINES means update todo statistics by including headlines
+`all-headlines' means update todo statistics by including headlines
 with no TODO keyword as well, counting them as not done.
 A list of TODO keywords means the same, but skip keywords that are
 not in this list.
@@ -4678,13 +4698,19 @@ related expressions."
 	      org-complex-heading-regexp
 	      (concat "^\\(\\*+\\)"
 		      "\\(?: +" org-todo-regexp "\\)?"
-		      (format "\\(?: +\\(\\[#\\(?:%s\\)\\]\\)\\)?" org-priority-value-regexp)
+		      (format "\\(?: +\\(%s\\(?:%s\\)%s\\)\\)?"
+                              (regexp-quote org-priority-prefix)
+                              org-priority-value-regexp
+                              (regexp-quote org-priority-suffix))
 		      "\\(?: +\\(.*?\\)\\)??"
                       org-tag--group-optional-re)
 	      org-complex-heading-regexp-format
 	      (concat "^\\(\\*+\\)"
 		      "\\(?: +" org-todo-regexp "\\)?"
-		      (format "\\(?: +\\(\\[#\\(?:%s\\)\\]\\)\\)?" org-priority-value-regexp)
+		      (format "\\(?: +\\(%s\\(?:%s\\)%s\\)\\)?"
+                              (regexp-quote org-priority-prefix)
+                              org-priority-value-regexp
+                              (regexp-quote org-priority-suffix))
 		      "\\(?: +"
                       ;; Headline might be commented
                       "\\(?:" org-comment-string " +\\)?"
@@ -5202,6 +5228,8 @@ The following commands are available:
      'match-hash :read-related t))
   (org-set-regexps-and-options)
   (add-to-invisibility-spec '(org-link))
+  (add-to-invisibility-spec '(org-emphasis))
+  (add-to-invisibility-spec '(org-raise))
   (org-fold-initialize (or (and (stringp org-ellipsis) (not (equal "" org-ellipsis)) org-ellipsis)
                            "..."))
   (make-local-variable 'org-link-descriptive)
@@ -5481,6 +5509,24 @@ stacked delimiters is N.  Escaping delimiters is not possible."
 (defsubst org-rear-nonsticky-at (pos)
   (add-text-properties (1- pos) pos (list 'rear-nonsticky org-nonsticky-props)))
 
+(defvar org-hidden-text-functions nil
+  "Abnormal hook called when hiding certain text during fontification.
+
+Each function on the hook should take five arguments:
+
+  TYPE: the type of text being hidden
+  BEG, END: the starting and ending buffer positions of the text
+  VBEG, VEND: the start and end of the visible portion of the text
+
+Currently supported types (symbols) are:
+
+  `emphasis': emphasized text with hidden markers, with non-nil
+              `org-hide-emphasis-markers'.
+
+  `link': bracket links, with non-nil `org-link-descriptive'.
+
+  `raise': sub/superscripts.")
+
 (defun org-do-emphasis-faces (limit)
   "Run through the buffer and emphasize strings."
   (let ((quick-re (format "\\([%s]\\|^\\)\\([~=*/_+]\\)"
@@ -5526,11 +5572,11 @@ stacked delimiters is N.  Escaping delimiters is not possible."
 	      (when (and org-hide-emphasis-markers
 			 (not (org-at-comment-p)))
 		(add-text-properties (match-end 4) (match-beginning 5)
-				     '(invisible t))
+				     '(invisible org-emphasis))
                 ;; https://orgmode.org/list/8b691a7f-6b62-d573-e5a8-80fac3dc9bc6@vodafonemail.de
                 (org-rear-nonsticky-at (match-beginning 5))
 		(add-text-properties (match-beginning 3) (match-end 3)
-				     '(invisible t))
+				     '(invisible org-emphasis))
                 ;; FIXME: This would break current behavior with point
                 ;; being adjusted before hidden emphasis marker when
                 ;; using M-b.  A proper fix would require custom
@@ -5538,7 +5584,9 @@ stacked delimiters is N.  Escaping delimiters is not possible."
                 ;; word constituents where appropriate.
                 ;; https://orgmode.org/list/87edl41jf0.fsf@localhost
                 ;; (org-rear-nonsticky-at (match-end 3))
-                )
+                (run-hook-with-args 'org-hidden-text-functions 'emphasis
+                                    (match-beginning 2) (match-end 2)
+                                    (match-beginning 4) (match-end 4)))
 	      (throw :exit t))))))))
 
 (defun org-emphasize (&optional char)
@@ -5601,13 +5649,13 @@ This includes angle, plain, and bracket links."
 	(if (and (memq style org-highlight-links)
 		 ;; Do not span over paragraph boundaries.
 		 (not (string-match-p org-element-paragraph-separate
-				    (match-string 0)))
+				      (match-string 0)))
 		 ;; Do not confuse plain links with tags.
 		 (not (and (eq style 'plain)
-			 (let ((face (get-text-property
-				      (max (1- start) (point-min)) 'face)))
-			   (if (consp face) (memq 'org-tag face)
-			     (eq 'org-tag face))))))
+			   (let ((face (get-text-property
+				        (max (1- start) (point-min)) 'face)))
+			     (if (consp face) (memq 'org-tag face)
+			       (eq 'org-tag face))))))
 	    (let* ((link-object (save-excursion
 				  (goto-char start)
 				  (save-match-data (org-element-link-parser))))
@@ -5653,7 +5701,10 @@ This includes angle, plain, and bracket links."
 		  (add-text-properties visible-start visible-end properties)
 		  (add-text-properties visible-end end hidden)
 		  (org-rear-nonsticky-at visible-start)
-		  (org-rear-nonsticky-at visible-end)))
+		  (org-rear-nonsticky-at visible-end))
+                (when org-link-descriptive
+                  (run-hook-with-args 'org-hidden-text-functions 'link
+                                      start end visible-start visible-end)))
 	      (let ((f (org-link-get-parameter type :activate-func)))
 	        (when (functionp f)
 		  (funcall f start end path (eq style 'bracket))))
@@ -6243,9 +6294,11 @@ needs to be inserted at a specific position in the font-lock sequence.")
           ;; Apply this last, after all the markup is highlighted, so
           ;; that even "bright" markup will become dim.
 	  (list (format
-		 "^\\*+\\(?: +%s\\)?\\(?: +\\[#\\(?:%s\\)\\]\\)? +\\(?9:%s\\)\\(?: \\|$\\)"
+		 "^\\*+\\(?: +%s\\)?\\(?: +%s\\(?:%s\\)%s\\)? +\\(?9:%s\\)\\(?: \\|$\\)"
 		 org-todo-regexp
+                 (regexp-quote org-priority-prefix)
                  org-priority-value-regexp
+                 (regexp-quote org-priority-suffix)
 		 org-comment-string)
 		'(9 'org-special-keyword prepend))
           '(org-activate-folds))))
@@ -6412,16 +6465,22 @@ If TAG is a number, get the corresponding match group."
 			   (list 'font-lock-fontified t))
       (backward-char 1))))
 
+(defvar org--extra-unfontify-properties nil
+  "Extra properties to unfontify.
+Specify as `(PROP1 PROP2 ...)'.")
+
 (defun org-unfontify-region (beg end &optional _maybe_loudly)
   "Remove fontification and activation overlays from links."
   (font-lock-default-unfontify-region beg end)
   (with-silent-modifications
     (decompose-region beg end)
-    (remove-text-properties beg end
-			    '(mouse-face t keymap t org-linked-text t
-					 invisible t intangible t
-					 org-emphasis t
-                                         syntax-table t))
+    (remove-text-properties
+     beg end
+     `( mouse-face t keymap t org-linked-text t
+	invisible t intangible t
+	org-emphasis t
+        syntax-table t
+        ,@(mapcan (lambda (p) (list p t)) org--extra-unfontify-properties)))
     (org-fold-core-update-optimization beg end)
     (org-remove-font-lock-display-properties beg end)))
 
@@ -6452,10 +6511,11 @@ and subscripts."
 		org-match-substring-with-braces-regexp)
 	      limit t))
     (let* ((pos (point)) table-p comment-p
-	   (mpos (match-beginning 3))
-	   (emph-p (get-text-property mpos 'org-emphasis))
-	   (link-p (get-text-property mpos 'mouse-face))
-	   (keyw-p (eq 'org-special-keyword (get-text-property mpos 'face))))
+	   (vbeg (match-beginning 3)) (vend (match-end 3))
+	   (emph-p (get-text-property vbeg 'org-emphasis))
+	   (link-p (get-text-property vbeg 'mouse-face))
+	   (keyw-p (eq 'org-special-keyword (get-text-property vbeg 'face)))
+           (props '(invisible org-raise rear-nonsticky (invisible))))
       (goto-char (line-beginning-position))
       (setq table-p (looking-at-p org-table-dataline-regexp)
 	    comment-p (looking-at-p "^[ \t]*#[ +]"))
@@ -6463,21 +6523,19 @@ and subscripts."
       ;; Handle a_b^c
       (when (member (char-after) '(?_ ?^)) (goto-char (1- pos)))
       (unless (or comment-p emph-p link-p keyw-p)
-	(put-text-property (match-beginning 3) (match-end 0)
-			   'display
+	(put-text-property (match-beginning 2) vend 'org-emphasis t)
+        (add-text-properties (match-beginning 2) (match-end 2) props)
+	(when (and (eq (char-after vbeg) ?{)
+		   (eq (char-before vend) ?}))
+	  (add-text-properties vbeg (1+ vbeg) props)
+	  (add-text-properties (1- vend) vend props)
+          (setq vbeg (1+ vbeg) vend (1- vend)))
+	(put-text-property vbeg vend 'display
 			   (if (equal (char-after (match-beginning 2)) ?^)
 			       (nth (if table-p 3 1) org-script-display)
 			     (nth (if table-p 2 0) org-script-display)))
-        (put-text-property (match-beginning 2) (match-end 3)
-                           'org-emphasis t)
-	(add-text-properties (match-beginning 2) (match-end 2)
-			     (list 'invisible t))
-	(when (and (eq (char-after (match-beginning 3)) ?{)
-		   (eq (char-before (match-end 3)) ?}))
-	  (add-text-properties (match-beginning 3) (1+ (match-beginning 3))
-			       (list 'invisible t))
-	  (add-text-properties (1- (match-end 3)) (match-end 3)
-			       (list 'invisible t))))
+        (run-hook-with-args 'org-hidden-text-functions 'raise
+                            (match-beginning 0) (match-end 0) vbeg vend))
       t)))
 
 (defun org-remove-empty-overlays-at (pos)
@@ -10624,7 +10682,6 @@ This function is run automatically after each state change to a DONE state."
 	      (when (equal repeater-unit `week)
                 (setq repeater-value (* repeater-value 7)
                       repeater-unit 'day))
-              (print (list has-start-time (org-current-line-string)))
 	      (when (and (equal repeater-unit `hour)
 			 (not has-start-time))
 		(user-error
@@ -10906,10 +10963,11 @@ WHAT entry will also be removed."
         (save-excursion
 	  (org-back-to-heading t)
 	  (let ((end (save-excursion (outline-next-heading) (point))) ts)
-	    (when (re-search-forward (if (eq what 'scheduled)
-				         org-scheduled-time-regexp
-				       org-deadline-time-regexp)
-				     end t)
+	    (when (and (re-search-forward (if (eq what 'scheduled)
+				              org-scheduled-time-regexp
+				            org-deadline-time-regexp)
+				          end t)
+                       (org-element-type-p (org-element-at-point) 'planning))
 	      (setq ts (match-string 1)
 		    default-time (org-time-string-to-time ts)
 		    default-input (and ts (org-get-compact-tod ts)))))))
@@ -11638,9 +11696,9 @@ interactive prompt, it will automatically be converted to uppercase."
 	    (if (match-end 2)
 		(progn
 		  (goto-char (match-end 2))
-		  (insert " [#" new-value-string "]"))
+		  (insert " " org-priority-prefix new-value-string org-priority-suffix))
 	      (goto-char (match-beginning 3))
-	      (insert "[#" new-value-string "] "))))
+	      (insert org-priority-prefix new-value-string org-priority-suffix " "))))
 	(when org-auto-align-tags (org-align-tags)))
       (if remove
 	  (message "Priority removed")
@@ -14121,7 +14179,6 @@ completion."
 	(while (>= n org-priority-highest)
 	  (push (org-priority-to-string n) vals)
 	  (setq n (1- n)))))
-     ((equal property "CATEGORY"))
      ((member property org-special-properties))
      ((setq vals (run-hook-with-args-until-success
 		  'org-property-allowed-value-functions property)))
@@ -19371,6 +19428,57 @@ Your bug report will be posted to the Org mailing list.
       (when (re-search-backward "^\\(Subject: \\)Org mode version \\(.*?\\);[ \t]*\\(.*\\)" nil t)
 	(replace-match "\\1[BUG] \\3 [\\2]")))))
 
+;;;###autoload
+(defun org-submit-feature-request ()
+  "Submit a feature request to Org mode.
+
+If you don't have setup sending mail from (X)Emacs, please copy the
+output buffer into your mail program, as it gives us important
+information about your Org version and configuration."
+  (interactive)
+  (require 'reporter)
+  (defvar reporter-prompt-for-summary-p)
+  (let ((reporter-prompt-for-summary-p "Feature request subject: "))
+    (reporter-submit-bug-report
+     "emacs-orgmode@gnu.org"
+     nil nil)
+    (save-excursion
+      (when (re-search-backward "^\\(Subject: \\)[ \t]*\\(.*\\)" nil t)
+	(replace-match "\\1[FR] \\2")))))
+
+;;;###autoload
+(defun org-submit-patch ()
+  "Submit a patch for Org via mail.
+
+Don't hesitate to submit unfinished patches and do not try too hard
+to follow every possible rule listed in
+https://orgmode.org/worg/org-contribute.html.  Just send what you have
+and we will help you along the way.
+
+If you don't have setup sending mail from (X)Emacs, please copy the
+output buffer into your mail program, as it gives us important
+information about your Org version and configuration."
+  (interactive)
+  (require 'reporter)
+  (defvar reporter-prompt-for-summary-p)
+  (let ((reporter-prompt-for-summary-p "Patch subject: "))
+    (reporter-submit-bug-report
+     "emacs-orgmode@gnu.org"
+     nil nil nil nil
+     "Please put your patch as email attachment and briefly describe its overall purpose.
+You may take a look at
+
+https://orgmode.org/worg/org-contribute.html
+
+but you do not need to stress too much over following all the rules.
+We will guide you along.
+
+Your patch will be posted to the Org mailing list.
+------------------------------------------------------------------------")
+    (save-excursion
+      (when (re-search-backward "^\\(Subject: \\)[ \t]*\\(.*\\)" nil t)
+	(replace-match "\\1[PATCH] \\2")))))
+
 (defun org-install-agenda-files-menu ()
   "Install agenda file menu."
   (let ((bl (buffer-list)))
@@ -19594,7 +19702,7 @@ and :keyword."
 	(push (org-point-in-group p 4 :tags) clist))
       (goto-char p)
       (skip-chars-backward "^[\n\r \t") (or (bobp) (backward-char 1))
-      (when (looking-at "\\[#[A-Z0-9]\\]")
+      (when (looking-at (org-make-priority-regexp t))
 	(push (org-point-in-group p 0 :priority) clist)))
 
      ((org-at-item-p)
