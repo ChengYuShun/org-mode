@@ -16623,6 +16623,10 @@ environment remains unintended."
   '("align" "align*" "equation" "equation*" "tikzcd")
   "A list of LaTeX environment keywords.")
 
+(defvar org-latex-avoidant-block-types
+  '("src")
+  "A list of block types in which we don't preview LaTeX.")
+
 (defun org-latex-environment-keywords-regex ()
   (eval `(rx (or ,@org-latex-environment-keywords))))
 
@@ -16818,9 +16822,10 @@ Some of the options can be changed using the variable
       (when (and overlays (memq processing-type '(dvipng imagemagick)))
 	(overlay-recenter (or end (point-max))))
       (while (re-search-forward math-regexp end t)
-	(unless (and overlays
-		     (eq (get-char-property (point) 'org-overlay-type)
-		         'org-latex-overlay))
+	(unless (or (and overlays
+		         (eq (get-char-property (point) 'org-overlay-type)
+		             'org-latex-overlay))
+                    (org-in-block-p org-latex-avoidant-block-types))
 	  (let* ((context (org-element-context))
 		 (type (org-element-type context)))
 	    (when (memq type '(latex-environment latex-fragment))
