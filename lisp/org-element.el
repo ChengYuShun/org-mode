@@ -3417,7 +3417,7 @@ Assume point is at first MARK."
       (unless (bolp) (forward-char -1))
       (let ((opening-re
              (rx-to-string
-              `(seq (or line-start (any space ?- ?\( ?' ?\" ?\{))
+              `(seq (or line-start (any space ?\( ?' ?\" ?\{ ?\[ ?-))
                     ,mark
                     (not space)))))
         (when (looking-at-p opening-re)
@@ -3427,7 +3427,7 @@ Assume point is at first MARK."
                   `(seq
                     (not space)
                     (group ,mark)
-                    (or (any space ?- ?. ?, ?\; ?: ?! ?? ?' ?\" ?\) ?\} ?\\ ?\[)
+                    (or (any space ?. ?, ?\; ?: ?! ?? ?' ?\" ?\) ?\} ?\\ ?\[ ?\] ?-)
                         line-end)))))
             (when (re-search-forward closing-re nil t)
               (let ((closing (match-end 1)))

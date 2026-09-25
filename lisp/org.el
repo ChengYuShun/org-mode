@@ -3968,7 +3968,7 @@ After a match, the match groups contain these elements:
 ;; set this option proved cumbersome.  See this message/thread:
 ;; https://orgmode.org/list/B72CDC2B-72F6-43A8-AC70-E6E6295766EC@gmail.com
 (defvar org-emphasis-regexp-components
-  '("-[:space:]('\"{" "-[:space:].,:!?;'\")}\\[" "[:space:]" "." 1)
+  '("[:space:]('\"{[-" "][:space:].,:!?;'\")}\\[-" "[:space:]" "." 1)
   "Components used to build the regular expression for FONTIFYING emphasis.
 WARNING: This variable only affects visual fontification, but does not
 change Org markup.  For example, it does not affect how emphasis markup
@@ -3986,6 +3986,9 @@ border       The chars *forbidden* as border characters.
 body-regexp  A regexp like \".\" to match a body character.  Don't use
              non-shy groups here, and don't allow newline here.
 newline      The maximum number of newlines allowed in an emphasis exp.
+
+Note that any \"-\" must be placed at the end, and any \"]\" must be
+placed at the beginning.
 
 You need to reload Org or to restart Emacs after setting this.")
 
