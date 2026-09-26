@@ -71,6 +71,7 @@
 (declare-function org-entry-get "org" (pom property &optional inherit literal-nil))
 (declare-function org-find-property "org" (property &optional value))
 (declare-function org-get-heading "org" (&optional no-tags no-todo no-priority no-comment))
+(declare-function org-get-image-scale "org" (file-or-data &optional data-p scale type))
 (declare-function org-id-find-id-file "org-id" (id))
 (declare-function org-insert-heading "org" (&optional arg invisible-ok top))
 (declare-function org-load-modules-maybe "org" (&optional force))
@@ -1131,6 +1132,7 @@ AFTER is true when this function is called post-change."
   "Create image located at FILE, or return nil.
 WIDTH is the width of the image.  The image may not be created
 according to the value of `org-display-remote-inline-images'."
+  (require 'org)
   (let* ((remote? (file-remote-p file))
 	 (file-or-data
 	  (pcase org-display-remote-inline-images
@@ -1148,7 +1150,7 @@ according to the value of `org-display-remote-inline-images'."
 	     (message "Invalid value of `org-display-remote-inline-images': %S"
 		      other)
 	     nil)))
-         (scale (org--get-image-scale file-or-data remote? nil)))
+         (scale (org-get-image-scale file-or-data remote? nil)))
     (when file-or-data
       (create-image file-or-data
 		    (and (image-type-available-p 'imagemagick)

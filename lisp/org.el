@@ -16953,7 +16953,7 @@ SCALE is the scaling factor that will be applied to the image.
 BLOCK-P can be either `environment', `fragment' or nil.  nil
 means this is not supposed to be centered."
   (if overlays
-      (let ((scale (org--get-image-scale movefile nil scale
+      (let ((scale (org-get-image-scale movefile nil scale
 					 imagetype)))
         (dolist (o (overlays-in beg end))
           (when (eq (overlay-get o 'org-overlay-type)
@@ -17365,7 +17365,7 @@ which by default is the print name of the symbol returned by
 	(unless (eql number 0)
 	  (float number))))))
 
-(defun org--get-image-scale (file-or-data &optional data-p scale type)
+(defun org-get-image-scale (file-or-data &optional data-p scale type)
   "Calculate the scaling factor for an image as float.
 
 IMAGE-TYPE is a string containing the type of the image, which
