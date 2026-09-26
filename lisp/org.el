@@ -3411,7 +3411,7 @@ This is a property list with the following properties:
              \"$$\"    find math expressions surrounded by $$....$$
              \"\\(\"    find math expressions surrounded by \\(...\\)
              \"\\=\\[\"    find math expressions surrounded by \\=\\[...\\]
-:justify     if set to 'center', will place block formulas at the center."
+:justify     if set to `center', will place block formulas at the center."
   :group 'org-latex
   :type 'plist)
 
@@ -16657,7 +16657,7 @@ as a string.  It defaults to \"png\".
 SCALE is the scaling factor that will be applied to the image,
 which defaults to 1.0.
 
-BLOCK-P can be either 'environment', 'fragment' or nil."
+BLOCK-P can be either `environment', `fragment' or nil."
   (let ((ov (make-overlay beg end))
 	(imagetype (or (intern imagetype) 'png)))
     (overlay-put ov 'org-overlay-type 'org-latex-overlay)
@@ -16681,7 +16681,7 @@ BLOCK-P can be either 'environment', 'fragment' or nil."
         (setq offset (- (window-text-width)
                         img-width
                         indentation))
-        (when org-indent-mode
+        (when (and (boundp 'org-indent-mode) org-indent-mode)
           (setq offset (- offset (* 2 (or (org-current-level) 0)))))
         (setq offset (/ offset 2))
         ;; For whatever reason, LaTeX fragments are placed differently
@@ -16950,7 +16950,7 @@ The overlay will be above BEG if OVERLAYS is non-nil.
 
 SCALE is the scaling factor that will be applied to the image.
 
-BLOCK-P can be either 'environment', 'fragment' or nil.  nil
+BLOCK-P can be either `environment', `fragment' or nil.  nil
 means this is not supposed to be centered."
   (if overlays
       (let ((scale (org--get-image-scale movefile nil scale
